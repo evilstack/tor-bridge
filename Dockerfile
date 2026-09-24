@@ -2,7 +2,7 @@
 ARG DEBIAN_RELEASE=bookworm
 ARG LYREBIRD_VERSION=0.8.1
 ARG WEBTUNNEL_VERSION=v0.0.5
-
+ARG GO_VERSION=1.25
 ########################################
 # Stage: base — common to both images
 ########################################
@@ -66,7 +66,7 @@ ENTRYPOINT ["tor", "-f", "/etc/tor/torrc"]
 ########################################
 # Stage: lyrebird-builder — compiles transport executable
 ########################################
-FROM golang:1.22-${DEBIAN_RELEASE} AS lyrebird-builder
+FROM golang:${GO_VERSION}-${DEBIAN_RELEASE} AS lyrebird-builder
 
 ARG LYREBIRD_VERSION=0.8.1
 
@@ -80,7 +80,7 @@ RUN ln -s /usr/bin/lyrebird /out/obfs4proxy
 ########################################
 # Stage: webtunnel-builder — compiles transport executable
 ########################################
-FROM golang:1.22-${DEBIAN_RELEASE} AS webtunnel-builder
+FROM golang:${GO_VERSION}-${DEBIAN_RELEASE} AS webtunnel-builder
 
 ARG WEBTUNNEL_VERSION=v0.0.5
 
