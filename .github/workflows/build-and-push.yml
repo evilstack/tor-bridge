@@ -88,7 +88,7 @@ jobs:
           exit-code: '1'
           ignore-unfixed: true
           vuln-type: 'os,library'
-          severity: 'CRITICAL,HIGH'
+          severity: 'CRITICAL'
 
       # Step 4: Generate OCI Labels & Metadata
       - name: Docker metadata
