@@ -1,0 +1,22 @@
+# Example base torrc for webtunnel bridge
+# Mount a real config over /etc/tor/torrc
+
+RunAsDaemon 0
+SocksPort 0
+BridgeRelay 1
+AssumeReachable 1
+
+DataDirectory /var/lib/tor
+Log notice stdout
+
+ORPort 127.0.0.1:auto
+ExtORPort auto
+Address <public IP>
+
+ServerTransportPlugin webtunnel exec /usr/bin/webtunnel-server
+ServerTransportListenAddr webtunnel 0.0.0.0:15000
+ServerTransportOptions webtunnel url=https://<decoy.domain.tld>/<secret-path>
+
+ContactInfo <you@domain.tld>
+Nickname <bridge nickname>
+
