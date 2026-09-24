@@ -73,6 +73,7 @@ ARG LYREBIRD_VERSION=0.8.1
 RUN set -eux; \
     git clone --depth 1 --branch lyrebird-${LYREBIRD_VERSION} https://gitlab.torproject.org/tpo/anti-censorship/pluggable-transports/lyrebird.git /src; \
     cd /src/cmd/lyrebird; \
+    go get github.com/pion/interceptor@v0.1.39; \
     CGO_ENABLED=0 go build -trimpath -ldflags="-s -w -X main.lyrebirdVersion=${LYREBIRD_VERSION}" -o /out/lyrebird
 
 RUN ln -s /usr/bin/lyrebird /out/obfs4proxy
