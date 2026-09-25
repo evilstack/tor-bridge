@@ -2,7 +2,6 @@ name: Build, Scan, and Push Tor Bridge Images
 
 on:
   schedule:
-    # Run every Sunday at 03:00 UTC
     - cron: '0 3 * * 0'
   workflow_dispatch:
   push:
@@ -16,6 +15,7 @@ env:
   REGISTRY: ghcr.io
   WEBTUNNEL_VERSION: v0.0.5
   LYREBIRD_VERSION: 0.8.1
+  GO_VERSION: '1.25'
 
 jobs:
   build-scan-push:
@@ -33,8 +33,140 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      # -----------------------------------------------------------------
+      # STAGE 1: FETCH SOURCE & GO REACHABILITY CHECK (govulncheck)
+      # -----------------------------------------------------------------
+      - name: Install govulncheck
+        run: go install golang.org/x/vuln/cmd/govulncheck@latest
+
+      - name: Checkout transport Go source
+        run: |
+          mkdir -p src
+          if [ "${{ matrix.target }}" = "obfs4" ]; then
+            git clone --depth 1 --branch lyrebird-${{ env.LYREBIRD_VERSION }} https://gitlab.torproject.org/tpo/anti-censorship/pluggable-transports/lyrebird.git src/lyrebird
+            cd src/lyrebird/cmd/lyrebird
+            govulncheck -format sarif ./... > ../../../govulncheck-${{ matrix.target }}.sarif || true
+          else
+            git clone --depth 1 --branch ${{ env.WEBTUNNEL_VERSION }} https://gitlab.torproject.org/tpo/anti-censorship/pluggable-transports/webtunnel.git src/webtunnel
+            cd src/webtunnel/main/server
+            govulncheck -format sarif ./... > ../../../govulncheck-${{ matrix.target }}.sarif || true
+          fi
+
+      - name: Publish govulncheck SARIF
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: 'govulncheck-${{ matrix.target }}.sarif'
+          category: 'govulncheck-${{ matrix.target }}'
+
+      # -----------------------------------------------------------------
+      # STAGE 2: BUILD & SCAN BASE OS CONTAINER (Fail Fast)
+      # -----------------------------------------------------------------
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
+
+      - name: Build Base OS Stage
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          target: base
+          pull: true
+          load: true
+          tags: local-tor-base:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Trivy - Scan Base OS Packages (Fail High/Critical)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
+        with:
+          image-ref: 'local-tor-base:${{ github.sha }}'
+          format: 'template'
+          template: '@trivy/github-markdown.tpl'
+          output: 'trivy-os-${{ matrix.target }}.md'
+          exit-code: '1'
+          ignore-unfixed: true
+          trivyignores: '.trivyignore-os'
+          vuln-type: 'os'
+          pkg-types: 'os'
+          severity: 'CRITICAL,HIGH'
+
+      - name: Write Trivy OS Exit Report to Job Summary
+        run: |
+          if [ -f trivy-os-${{ matrix.target }}.md ]; then
+            cat trivy-os-${{ matrix.target }}.md >> $GITHUB_STEP_SUMMARY
+          fi
+        if: always()
+
+      # -----------------------------------------------------------------
+      # STAGE 3: BUILD TARGET IMAGE & EXTRACT METADATA
+      # -----------------------------------------------------------------
+      - name: Build Final Base Image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          target: ${{ matrix.target }}
+          load: true
+          build-args: |
+            WEBTUNNEL_VERSION=${{ env.WEBTUNNEL_VERSION }}
+            LYREBIRD_VERSION=${{ env.LYREBIRD_VERSION }}
+          tags: local-tor-${{ matrix.target }}:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Extract Installed Tor Version
+        run: |
+          RAW_VER=$(docker run --rm local-tor-${{ matrix.target }}:${{ github.sha }} tor --version | head -n 1)
+          TOR_VER=$(echo "$RAW_VER" | awk '{print $3}' | sed 's/\.$//')
+          echo "TOR_VER=${TOR_VER}" >> $GITHUB_ENV
+
+      # -----------------------------------------------------------------
+      # STAGE 4: TRIVY LIBRARY SCANS & PUBLISH
+      # -----------------------------------------------------------------
+      - name: Trivy - Scan App Libraries (Fail Critical)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
+        with:
+          image-ref: 'local-tor-${{ matrix.target }}:${{ github.sha }}'
+          format: 'template'
+          template: '@trivy/github-markdown.tpl'
+          output: 'trivy-lib-critical-${{ matrix.target }}.md'
+          exit-code: '1'
+          ignore-unfixed: true
+          trivyignores: '.trivyignore-lib'
+          vuln-type: 'library'
+          pkg-types: 'library'
+          severity: 'CRITICAL'
+
+      - name: Write Trivy Library Exit Report to Job Summary
+        run: |
+          if [ -f trivy-lib-critical-${{ matrix.target }}.md ]; then
+            cat trivy-lib-critical-${{ matrix.target }}.md >> $GITHUB_STEP_SUMMARY
+          fi
+        if: always()
+
+      - name: Trivy - Scan App Libraries (Report High)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
+        with:
+          image-ref: 'local-tor-${{ matrix.target }}:${{ github.sha }}'
+          format: 'sarif'
+          output: 'trivy-lib-high-${{ matrix.target }}.sarif'
+          exit-code: '0'
+          ignore-unfixed: true
+          trivyignores: '.trivyignore-lib'
+          vuln-type: 'library'
+          pkg-types: 'library'
+          severity: 'HIGH'
+
+      - name: Publish Trivy Library High SARIF
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: 'trivy-lib-high-${{ matrix.target }}.sarif'
+          category: 'trivy-lib-high-${{ matrix.target }}'
 
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
@@ -43,11 +175,11 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Lowercase image name
+      - name: Lowercase Image Name
         run: |
           echo "IMAGE_NAME_LOWER=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
 
-      - name: Set transport version variable
+      - name: Set Transport Version Variable
         run: |
           if [ "${{ matrix.target }}" = "obfs4" ]; then
             echo "TRANSPORT_VER=lyrebird-${{ env.LYREBIRD_VERSION }}" >> $GITHUB_ENV
@@ -55,50 +187,14 @@ jobs:
             echo "TRANSPORT_VER=webtunnel-${{ env.WEBTUNNEL_VERSION }}" >> $GITHUB_ENV
           fi
 
-      # Step 1: Build local image first (so we can inspect the installed package versions)
-      - name: Build local container image
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          target: ${{ matrix.target }}
-          pull: true # Ensures fresh upstream base image & APT cache check
-          load: true # Loads into local Docker daemon for running commands & scanning
-          build-args: |
-            WEBTUNNEL_VERSION=${{ env.WEBTUNNEL_VERSION }}
-            LYREBIRD_VERSION=${{ env.LYREBIRD_VERSION }}
-          tags: local-tor-${{ matrix.target }}:${{ github.sha }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      # Step 2: Extract installed Tor daemon version from the built image
-      - name: Extract installed Tor version
-        run: |
-          RAW_VER=$(docker run --rm local-tor-${{ matrix.target }}:${{ github.sha }} tor --version | head -n 1)
-          # Parses "Tor version 0.4.8.12." -> "0.4.8.12"
-          TOR_VER=$(echo "$RAW_VER" | awk '{print $3}' | sed 's/\.$//')
-          echo "Detected Tor Version: $TOR_VER"
-          echo "TOR_VER=${TOR_VER}" >> $GITHUB_ENV
-
-      # Step 3: Run Trivy vulnerability scan
-      - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
-        with:
-          image-ref: 'local-tor-${{ matrix.target }}:${{ github.sha }}'
-          format: 'table'
-          exit-code: '1'
-          ignore-unfixed: true
-          vuln-type: 'os,library'
-          severity: 'CRITICAL'
-
-      # Step 4: Generate OCI Labels & Metadata
-      - name: Docker metadata
+      - name: Docker Metadata
         id: meta
         uses: docker/metadata-action@v5
         with:
           images: |
             ghcr.io/${{ env.IMAGE_NAME_LOWER }}/tor-${{ matrix.target }}
           labels: |
-            org.opencontainers.image.title=Tor Bridge (${{ matrix.target }})
+            org.opencontainers.image.title=Tor (${{ matrix.target }}) Bridge
             org.opencontainers.image.description=Tor bridge container image with ${{ matrix.target }} transport
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.torproject.tor.version=${{ env.TOR_VER }}
@@ -108,8 +204,7 @@ jobs:
             type=raw,value=${{ env.TRANSPORT_VER }}
             type=sha,prefix=main-,format=short
 
-      # Step 5: Push image to GHCR with OCI labels attached
-      - name: Push image to GHCR
+      - name: Push Image to GHCR
         uses: docker/build-push-action@v6
         with:
           context: .
