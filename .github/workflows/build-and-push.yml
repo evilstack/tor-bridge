@@ -59,7 +59,7 @@ jobs:
 
       - name: Publish govulncheck SARIF
         uses: github/codeql-action/upload-sarif@v3
-        if: always()
+        if: hashFiles(format('govulncheck-{0}.sarif', matrix.target)) != ''
         with:
           sarif_file: 'govulncheck-${{ matrix.target }}.sarif'
           category: 'govulncheck-${{ matrix.target }}'
