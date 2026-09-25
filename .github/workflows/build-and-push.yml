@@ -163,7 +163,7 @@ jobs:
 
       - name: Publish Trivy Library High SARIF
         uses: github/codeql-action/upload-sarif@v3
-        if: always()
+        if: hashFiles(format('trivy-lib-high-{0}.sarif', matrix.target)) != ''
         with:
           sarif_file: 'trivy-lib-high-${{ matrix.target }}.sarif'
           category: 'trivy-lib-high-${{ matrix.target }}'
