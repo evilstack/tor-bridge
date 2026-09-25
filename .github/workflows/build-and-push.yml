@@ -85,9 +85,8 @@ jobs:
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
         with:
           image-ref: 'local-tor-base:${{ github.sha }}'
-          format: 'template'
-          template: '@trivy/github-markdown.tpl'
-          output: 'trivy-os-${{ matrix.target }}.md'
+          format: 'json'
+          output: 'trivy-os-${{ matrix.target }}.json'
           exit-code: '1'
           ignore-unfixed: true
           trivyignores: '.trivyignore-os'
@@ -95,12 +94,11 @@ jobs:
           pkg-types: 'os'
           severity: 'CRITICAL,HIGH'
 
-      - name: Write Trivy OS Exit Report to Job Summary
-        run: |
-          if [ -f trivy-os-${{ matrix.target }}.md ]; then
-            cat trivy-os-${{ matrix.target }}.md >> $GITHUB_STEP_SUMMARY
-          fi
-        if: always()
+      - name: Format Trivy OS Exit Report and Write to Job Summary
+        if: always() && hashFiles('trivy-os-${{ matrix.target }}.json') != ''
+        uses: Tooark/trivy-summary-action@v1
+        with:
+          trivy-json: 'trivy-os-${{ matrix.target }}.json'
 
       # -----------------------------------------------------------------
       # STAGE 3: BUILD TARGET IMAGE & EXTRACT METADATA
@@ -131,9 +129,8 @@ jobs:
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
         with:
           image-ref: 'local-tor-${{ matrix.target }}:${{ github.sha }}'
-          format: 'template'
-          template: '@trivy/github-markdown.tpl'
-          output: 'trivy-lib-critical-${{ matrix.target }}.md'
+          format: 'json'
+          output: 'trivy-lib-critical-${{ matrix.target }}.json'
           exit-code: '1'
           ignore-unfixed: true
           trivyignores: '.trivyignore-lib'
@@ -141,12 +138,11 @@ jobs:
           pkg-types: 'library'
           severity: 'CRITICAL'
 
-      - name: Write Trivy Library Exit Report to Job Summary
-        run: |
-          if [ -f trivy-lib-critical-${{ matrix.target }}.md ]; then
-            cat trivy-lib-critical-${{ matrix.target }}.md >> $GITHUB_STEP_SUMMARY
-          fi
-        if: always()
+      - name: Format Trivy Library Exit Report and Write to Job Summary
+        if: always() && hashFiles('trivy-lib-critical-${{ matrix.target }}.json') != ''
+        uses: Tooark/trivy-summary-action@v1
+        with:
+          trivy-json: 'trivy-lib-critical-${{ matrix.target }}.json'
 
       - name: Trivy - Scan App Libraries (Report High)
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
