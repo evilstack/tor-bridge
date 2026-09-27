@@ -82,7 +82,7 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Trivy - Scan Base OS Packages (Fail High/Critical)
-        uses: 'aquasecurity/trivy-action@${{ env.TRIVY_VERSION }}'
+        uses: 'aquasecurity/trivy-action@v0.36.0'
         with:
           image-ref: 'local-tor-base:${{ github.sha }}'
           format: 'github'
@@ -125,7 +125,7 @@ jobs:
       # STAGE 4: TRIVY LIBRARY SCANS & PUBLISH
       # -----------------------------------------------------------------
       - name: Trivy - Scan App Libraries (Fail Critical)
-        uses: 'aquasecurity/trivy-action@${{ env.TRIVY_VERSION }}'
+        uses: 'aquasecurity/trivy-action@v0.36.0'
         with:
           image-ref: 'local-tor-${{ matrix.target }}:${{ github.sha }}'
           format: 'github'
@@ -143,7 +143,7 @@ jobs:
 #          trivy-json: 'trivy-lib-critical-${{ matrix.target }}.json'
 
       - name: Trivy - Scan App Libraries (Report High)
-        uses: 'aquasecurity/trivy-action@${{ env.TRIVY_VERSION }}'
+        uses: 'aquasecurity/trivy-action@v0.36.0'
         with:
           image-ref: 'local-tor-${{ matrix.target }}:${{ github.sha }}'
           format: 'sarif'
