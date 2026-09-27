@@ -85,7 +85,7 @@ jobs:
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
         with:
           image-ref: 'local-tor-base:${{ github.sha }}'
-          format: 'text'
+          format: 'github'
 #          output: 'trivy-os-${{ matrix.target }}.json'
           exit-code: '1'
           ignore-unfixed: true
@@ -128,7 +128,7 @@ jobs:
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
         with:
           image-ref: 'local-tor-${{ matrix.target }}:${{ github.sha }}'
-          format: 'exit'
+          format: 'github'
           output: 'trivy-lib-critical-${{ matrix.target }}.json'
           exit-code: '1'
           ignore-unfixed: true
