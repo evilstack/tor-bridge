@@ -91,7 +91,6 @@ jobs:
           ignore-unfixed: true
           trivyignores: '.trivyignore-os'
           vuln-type: 'os'
-          pkg-types: 'os'
           severity: 'CRITICAL,HIGH'
 
       - name: Format Trivy OS Exit Report and Write to Job Summary
@@ -136,7 +135,6 @@ jobs:
           ignore-unfixed: true
           trivyignores: '.trivyignore-lib'
           vuln-type: 'library'
-          pkg-types: 'library'
           severity: 'CRITICAL'
 
       - name: Format Trivy Library Exit Report and Write to Job Summary
@@ -156,7 +154,6 @@ jobs:
           ignore-unfixed: true
           trivyignores: '.trivyignore-lib'
           vuln-type: 'library'
-          pkg-types: 'library'
           severity: 'HIGH'
 
       - name: Publish Trivy Library High SARIF
