@@ -58,7 +58,7 @@ jobs:
           fi
 
       - name: Publish govulncheck SARIF
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         if: hashFiles(format('govulncheck-{0}.sarif', matrix.target)) != ''
         with:
           sarif_file: 'govulncheck-${{ matrix.target }}.sarif'
@@ -160,7 +160,7 @@ jobs:
           severity: 'HIGH'
 
       - name: Publish Trivy Library High SARIF
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         if: hashFiles(format('trivy-lib-high-{0}.sarif', matrix.target)) != ''
         with:
           sarif_file: 'trivy-lib-high-${{ matrix.target }}.sarif'
