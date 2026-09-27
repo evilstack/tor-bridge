@@ -95,10 +95,9 @@ jobs:
 
       - name: Format Trivy OS Exit Report and Write to Job Summary
         if: always() && hashFiles('trivy-os-${{ matrix.target }}.json') != ''
-        uses: Tooark/trivy-summary-action@v1
+        uses: simonjund/trivy-summary-action@v1
         with:
           trivy-json: 'trivy-os-${{ matrix.target }}.json'
-          language: en
 
       # -----------------------------------------------------------------
       # STAGE 3: BUILD TARGET IMAGE & EXTRACT METADATA
@@ -139,10 +138,9 @@ jobs:
 
       - name: Format Trivy Library Exit Report and Write to Job Summary
         if: always() && hashFiles('trivy-lib-critical-${{ matrix.target }}.json') != ''
-        uses: Tooark/trivy-summary-action@v1
+        uses: simonjund/trivy-summary-action@v1
         with:
           trivy-json: 'trivy-lib-critical-${{ matrix.target }}.json'
-          language: en
 
       - name: Trivy - Scan App Libraries (Report High)
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
