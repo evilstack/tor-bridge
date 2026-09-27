@@ -85,19 +85,19 @@ jobs:
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
         with:
           image-ref: 'local-tor-base:${{ github.sha }}'
-          format: 'json'
-          output: 'trivy-os-${{ matrix.target }}.json'
+          format: 'text'
+#          output: 'trivy-os-${{ matrix.target }}.json'
           exit-code: '1'
           ignore-unfixed: true
           trivyignores: '.trivyignore-os'
           vuln-type: 'os'
           severity: 'CRITICAL,HIGH'
 
-      - name: Format Trivy OS Exit Report and Write to Job Summary
-        if: always() && hashFiles('trivy-os-${{ matrix.target }}.json') != ''
-        uses: simonjund/trivy-summary-action@v1
-        with:
-          trivy-json: 'trivy-os-${{ matrix.target }}.json'
+#      - name: Format Trivy OS Exit Report and Write to Job Summary
+#        if: always() && hashFiles('trivy-os-${{ matrix.target }}.json') != ''
+#        uses: simonjund/trivy-summary-action@v1
+#        with:
+#          trivy-json: 'trivy-os-${{ matrix.target }}.json'
 
       # -----------------------------------------------------------------
       # STAGE 3: BUILD TARGET IMAGE & EXTRACT METADATA
@@ -128,7 +128,7 @@ jobs:
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
         with:
           image-ref: 'local-tor-${{ matrix.target }}:${{ github.sha }}'
-          format: 'json'
+          format: 'exit'
           output: 'trivy-lib-critical-${{ matrix.target }}.json'
           exit-code: '1'
           ignore-unfixed: true
@@ -136,11 +136,11 @@ jobs:
           vuln-type: 'library'
           severity: 'CRITICAL'
 
-      - name: Format Trivy Library Exit Report and Write to Job Summary
-        if: always() && hashFiles('trivy-lib-critical-${{ matrix.target }}.json') != ''
-        uses: simonjund/trivy-summary-action@v1
-        with:
-          trivy-json: 'trivy-lib-critical-${{ matrix.target }}.json'
+#      - name: Format Trivy Library Exit Report and Write to Job Summary
+#        if: always() && hashFiles('trivy-lib-critical-${{ matrix.target }}.json') != ''
+#        uses: simonjund/trivy-summary-action@v1
+#        with:
+#          trivy-json: 'trivy-lib-critical-${{ matrix.target }}.json'
 
       - name: Trivy - Scan App Libraries (Report High)
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
