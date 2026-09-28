@@ -24,6 +24,7 @@ jobs:
       contents: read
       packages: write
       security-events: write
+      id-token: write
 
     strategy:
       matrix:
@@ -203,6 +204,8 @@ jobs:
           context: .
           target: ${{ matrix.target }}
           push: true
+          provenance: true
+          sbom: true
           build-args: |
             WEBTUNNEL_VERSION=${{ env.WEBTUNNEL_VERSION }}
             LYREBIRD_VERSION=${{ env.LYREBIRD_VERSION }}
