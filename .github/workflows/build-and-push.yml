@@ -51,10 +51,14 @@ jobs:
           if [ "${{ matrix.target }}" = "obfs4" ]; then
             git clone --depth 1 --branch lyrebird-${{ env.LYREBIRD_VERSION }} https://gitlab.torproject.org/tpo/anti-censorship/pluggable-transports/lyrebird.git src/lyrebird
             cd src/lyrebird/cmd/lyrebird
+            echo "=== govulncheck results (obfs4/lyrebird) ==="
+            govulncheck ./... || true
             govulncheck -format sarif ./... > ../../../govulncheck-${{ matrix.target }}.sarif || true
           else
             git clone --depth 1 --branch ${{ env.WEBTUNNEL_VERSION }} https://gitlab.torproject.org/tpo/anti-censorship/pluggable-transports/webtunnel.git src/webtunnel
             cd src/webtunnel/main/server
+            echo "=== govulncheck results (webtunnel) ==="
+            govulncheck ./... || true
             govulncheck -format sarif ./... > ../../../govulncheck-${{ matrix.target }}.sarif || true
           fi
 
