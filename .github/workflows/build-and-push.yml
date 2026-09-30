@@ -45,7 +45,7 @@ jobs:
       - name: Install govulncheck
         run: go install golang.org/x/vuln/cmd/govulncheck@latest
 
-      - name: Checkout transport Go source
+      - name: Checkout transport source, run govulncheck
         run: |
           mkdir -p src
           if [ "${{ matrix.target }}" = "obfs4" ]; then
