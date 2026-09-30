@@ -51,15 +51,15 @@ jobs:
           if [ "${{ matrix.target }}" = "obfs4" ]; then
             git clone --depth 1 --branch lyrebird-${{ env.LYREBIRD_VERSION }} https://gitlab.torproject.org/tpo/anti-censorship/pluggable-transports/lyrebird.git src/lyrebird
             cd src/lyrebird/cmd/lyrebird
-            govulncheck -format sarif ./... > ../../../govulncheck-${{ matrix.target }}.sarif || true
+            govulncheck -format sarif ./... > ../../../../govulncheck-${{ matrix.target }}.sarif || true
             echo "=== govulncheck (lyrebird) ==="
-            jq -r '.runs[].results[]? | "• [\(.ruleId)] \(.message.text)"' ../../govulncheck-${{ matrix.target }}.sarif
+            jq -r '.runs[].results[]? | "• [\(.ruleId)] \(.message.text)"' ../../../../govulncheck-${{ matrix.target }}.sarif
           else
             git clone --depth 1 --branch ${{ env.WEBTUNNEL_VERSION }} https://gitlab.torproject.org/tpo/anti-censorship/pluggable-transports/webtunnel.git src/webtunnel
             cd src/webtunnel/main/server
-            govulncheck -format sarif ./... > ../../../govulncheck-${{ matrix.target }}.sarif || true
+            govulncheck -format sarif ./... > ../../../../govulncheck-${{ matrix.target }}.sarif || true
             echo "=== govulncheck results (webtunnel) ==="
-            jq -r '.runs[].results[]? | "• [\(.ruleId)] \(.message.text)"' ../../govulncheck-${{ matrix.target }}.sarif
+            jq -r '.runs[].results[]? | "• [\(.ruleId)] \(.message.text)"' ../../../../govulncheck-${{ matrix.target }}.sarif
           fi
 
       - name: Publish govulncheck SARIF
