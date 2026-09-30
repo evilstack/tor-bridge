@@ -117,8 +117,8 @@ jobs:
             WEBTUNNEL_VERSION=${{ env.WEBTUNNEL_VERSION }}
             LYREBIRD_VERSION=${{ env.LYREBIRD_VERSION }}
           tags: local-tor-${{ matrix.target }}:${{ github.sha }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=tor-${{ matrix.target }}
+          cache-to: type=gha,mode=max,scope=tor-${{ matrix.target }}
 
       - name: Extract Installed Tor Version
         run: |
@@ -215,4 +215,5 @@ jobs:
             LYREBIRD_VERSION=${{ env.LYREBIRD_VERSION }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
+          cache-from: type=gha,scope=tor-${{ matrix.target }}
+          cache-to: type=gha,scope=tor-${{ matrix.target }}

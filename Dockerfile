@@ -70,6 +70,8 @@ COPY ./src/lyrebird /src
 
 RUN set -eux; \
     cd /src/cmd/lyrebird; \
+    --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
     go get github.com/pion/interceptor@v0.1.39; \
     CGO_ENABLED=0 go build -trimpath -ldflags="-s -w -X main.lyrebirdVersion=${LYREBIRD_VERSION}" -o /out/lyrebird; \
     ln -s /usr/bin/lyrebird /out/obfs4proxy
@@ -87,6 +89,8 @@ COPY ./src/webtunnel /src
 
 RUN set -eux; \
     cd /src/main/server; \
+    --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
     CGO_ENABLED=0 go build -trimpath -ldflags="-s -w -X main.webtunnelVersion=${WEBTUNNEL_VERSION}" -o /out/webtunnel-server
 
 ########################################
