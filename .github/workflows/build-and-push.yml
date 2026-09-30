@@ -1,4 +1,4 @@
-name: Build, Scan, and Push Tor Bridge Images
+name: Build, Scan, and Push Images
 
 on:
   pull_request:
@@ -79,7 +79,7 @@ jobs:
 
       - name: Publish govulncheck SARIF
         uses: github/codeql-action/upload-sarif@v4
-        if: hashFiles(format('govulncheck-{0}.sarif', matrix.target)) != ''
+        if: github.ref == 'refs/heads/main' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' && hashFiles(format('govulncheck-{0}.sarif', matrix.target)) != ''
         with:
           sarif_file: 'govulncheck-${{ matrix.target }}.sarif'
           category: 'govulncheck-${{ matrix.target }}'
@@ -106,18 +106,11 @@ jobs:
         with:
           image-ref: 'local-tor-base:${{ github.sha }}'
           format: 'github'
-#          output: 'trivy-os-${{ matrix.target }}.json'
           exit-code: '1'
           ignore-unfixed: true
           trivyignores: '.trivyignore-os'
           vuln-type: 'os'
           severity: 'CRITICAL,HIGH'
-
-#      - name: Format Trivy OS Exit Report and Write to Job Summary
-#        if: always() && hashFiles('trivy-os-${{ matrix.target }}.json') != ''
-#        uses: simonjund/trivy-summary-action@v1
-#        with:
-#          trivy-json: 'trivy-os-${{ matrix.target }}.json'
 
       # -----------------------------------------------------------------
       # STAGE 3: BUILD TARGET IMAGE & EXTRACT METADATA
@@ -156,18 +149,11 @@ jobs:
           vuln-type: 'library'
           severity: 'CRITICAL'
 
-#      - name: Format Trivy Library Exit Report and Write to Job Summary
-#        if: always() && hashFiles('trivy-lib-critical-${{ matrix.target }}.json') != ''
-#        uses: simonjund/trivy-summary-action@v1
-#        with:
-#          trivy-json: 'trivy-lib-critical-${{ matrix.target }}.json'
-
       - name: Trivy - Scan App Libraries (Report High)
         uses: 'aquasecurity/trivy-action@v0.36.0'
         with:
           image-ref: 'local-tor-${{ matrix.target }}:${{ github.sha }}'
           format: 'sarif'
-          output: 'trivy-lib-high-${{ matrix.target }}.sarif'
           exit-code: '0'
           ignore-unfixed: true
           trivyignores: '.trivyignore-lib'
