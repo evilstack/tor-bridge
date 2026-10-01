@@ -143,6 +143,8 @@ jobs:
           label: Tor Version
           message:: ${{ env.TOR_VER }}
           color: purple
+          logo: tor
+          logoColor: white
 
       # -----------------------------------------------------------------
       # STAGE 4: TRIVY LIBRARY SCANS & PUBLISH
