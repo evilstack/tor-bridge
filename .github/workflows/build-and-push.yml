@@ -3,20 +3,14 @@ name: Build, Scan, and Push Images
 on:
   pull_request:
     branches: [ main ]
-    paths-ignore:
-      - '**.md'
-      - 'docs/**'
-      - '.gitignore'
-      - 'LICENSE'
-      - '**.example'
+    paths:
+      - 'Dockerfile'
+      - '.github/workflows/build-and-push.yml'
   push:
     branches: [ main ]
-    paths-ignore:
-      - '**.md'
-      - 'docs/**'
-      - '.gitignore'
-      - 'LICENSE'
-      - '**.example'
+    paths:
+      - 'Dockerfile'
+      - '.github/workflows/build-and-push.yml'
   schedule:
     - cron: '0 3 * * 0'
   workflow_dispatch:
@@ -27,10 +21,10 @@ concurrency:
 
 env:
   REGISTRY: ghcr.io
-  WEBTUNNEL_VERSION: v0.0.5
-  LYREBIRD_VERSION: 0.8.1
+  WEBTUNNEL_VERSION: '0.0.5'
+  LYREBIRD_VERSION: '0.8.1'
   GO_VERSION: '1.25'
-  TRIVY_VERSION: 'v0.36.0'
+  TRIVY_VERSION: '0.36.0'
 jobs:
   build-scan-push:
     runs-on: ubuntu-latest
@@ -70,7 +64,7 @@ jobs:
             echo "=== govulncheck (lyrebird) ==="
             jq -r '.runs[].results[]? | "• [\(.ruleId)] \(.message.text)"' ../../../../govulncheck-${{ matrix.target }}.sarif
           else
-            git clone --depth 1 --branch ${{ env.WEBTUNNEL_VERSION }} https://gitlab.torproject.org/tpo/anti-censorship/pluggable-transports/webtunnel.git src/webtunnel
+            git clone --depth 1 --branch v${{ env.WEBTUNNEL_VERSION }} https://gitlab.torproject.org/tpo/anti-censorship/pluggable-transports/webtunnel.git src/webtunnel
             cd src/webtunnel/main/server
             govulncheck -format sarif ./... > ../../../../govulncheck-${{ matrix.target }}.sarif || true
             echo "=== govulncheck results (webtunnel) ==="
@@ -102,7 +96,7 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Trivy - Scan Base OS Packages (Fail High/Critical)
-        uses: 'aquasecurity/trivy-action@v0.36.0'
+        uses: 'aquasecurity/trivy-action@v${{ TRIVY_VERSION }}'
         with:
           image-ref: 'local-tor-base:${{ github.sha }}'
           format: 'github'
@@ -133,25 +127,21 @@ jobs:
           RAW_VER=$(docker run --rm --entrypoint "" local-tor-${{ matrix.target }}:${{ github.sha }} tor --version 2>&1)
           TOR_VER=$(echo "$RAW_VER" | grep -oP 'Tor version \K[0-9]+(\.[0-9]+)+' | head -n 1)
           TOR_VER=${TOR_VER:-unknown}
+          echo "$TOR_VER" > tor_version.txt
           echo "TOR_VER=${TOR_VER}" >> $GITHUB_ENV
 
-      - name: Update Tor Version Badge Gist
-        uses: schneegans/dynamic-badges-action@v1.9.0
+      - name: Upload Tor Version Artifact
+        uses: actions/upload-artifact@v4
         with:
-          auth: ${{ secrets.GIST_SECRET_TOKEN }}
-          gistID: "5aed119df3ac047fb3e06085fe0bcfb7"
-          filename: tor-version.json
-          label: "Tor Version"
-          message: ${{ env.TOR_VER || 'unknown' }}
-          color: "purple"
-          namedLogo: "tor-project"
-          logoColor: "white"
+          name: tor-version-artifact
+          path: tor_version.txt
+          retention-days: 1
 
       # -----------------------------------------------------------------
       # STAGE 4: TRIVY LIBRARY SCANS & PUBLISH
       # -----------------------------------------------------------------
       - name: Trivy - Scan App Libraries (Fail Critical)
-        uses: 'aquasecurity/trivy-action@v0.36.0'
+        uses: 'aquasecurity/trivy-action@v${{ TRIVY_VERSION }}'
         with:
           image-ref: 'local-tor-${{ matrix.target }}:${{ github.sha }}'
           format: 'github'
@@ -163,7 +153,7 @@ jobs:
           severity: 'CRITICAL'
 
       - name: Trivy - Scan App Libraries (Report High)
-        uses: 'aquasecurity/trivy-action@v0.36.0'
+        uses: 'aquasecurity/trivy-action@v${{ TRIVY_VERSION }}'
         with:
           image-ref: 'local-tor-${{ matrix.target }}:${{ github.sha }}'
           format: 'sarif'
@@ -233,3 +223,19 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha,scope=tor-${{ matrix.target }}
           cache-to: type=gha,mode=max,scope=tor-${{ matrix.target }}
+
+  required-check:
+    runs-on: ubuntu-latest
+    needs: [ build-scan-push ]
+    if: always() # Runs even if 'build-scan-push' is skipped due to path filtering
+    steps:
+      - name: Evaluate Build Result
+        run: |
+          # If the build job ran and failed, block the PR
+          if [ "${{ needs.build-scan-push.result }}" == "failure" ]; then
+            echo "Main build pipeline failed."
+            exit 1
+          fi
+
+          # If skipped or successful, pass the gate
+          echo "Build check passed or safely skipped via path filtering."
