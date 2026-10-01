@@ -135,7 +135,7 @@ jobs:
           echo "TOR_VER=${TOR_VER}" >> $GITHUB_ENV
 
       - name: Update Tor Version Badge Gist
-        uses: schneegans/dynamic-bages-action@v1.7.0
+        uses: schneegans/dynamic-badges-action@v1.9.0
         with:
           auth: ${{ secrets.GIST_SECRET_TOKEN }}
           gist_id: '5aed119df3ac047fb3e06085fe0bcfb7'
