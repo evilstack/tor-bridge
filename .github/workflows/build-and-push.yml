@@ -1,4 +1,4 @@
-name: Build, Scan, and Push Images
+wname: Build, Scan, and Push Images
 
 on:
   pull_request:
@@ -130,8 +130,9 @@ jobs:
 
       - name: Extract Installed Tor Version
         run: |
-          RAW_VER=$(docker run --rm local-tor-${{ matrix.target }}:${{ github.sha }} tor --version | head -n 1)
-          TOR_VER=$(echo "$RAW_VER" | grep -oP 'Tor version \K[0-9+\.[0-9]+\.[0-9]+\.[0-9]+')
+          RAW_VER=$(docker run --rm local-tor-${{ matrix.target }}:${{ github.sha }} tor --version 2>&1)
+          TOR_VER=$(echo "$RAW_VER" | grep -oP 'Tor version \K[0-9]+(\.[0-9]+)+' | head -n 1)
+          TOR_VER=${TOR_VER:-unknown}
           echo "TOR_VER=${TOR_VER}" >> $GITHUB_ENV
 
       - name: Update Tor Version Badge Gist
