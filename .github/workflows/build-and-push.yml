@@ -144,7 +144,7 @@ jobs:
           label: "Tor Version"
           message: ${{ env.TOR_VER || 'unknown' }}
           color: "purple"
-          namedLogo: "tor"
+          namedLogo: "tor-project"
           logoColor: "white"
 
       # -----------------------------------------------------------------
