@@ -138,13 +138,13 @@ jobs:
         uses: schneegans/dynamic-badges-action@v1.9.0
         with:
           auth: ${{ secrets.GIST_SECRET_TOKEN }}
-          gistID: '5aed119df3ac047fb3e06085fe0bcfb7'
-          filename: 'tor-version.json'
-          label: Tor Version
-          message:: ${{ env.TOR_VER }}
-          color: purple
-          logo: tor
-          logoColor: white
+          gistID: "5aed119df3ac047fb3e06085fe0bcfb7"
+          filename: tor-version.json
+          label: "Tor Version"
+          message: ${{ env.TOR_VER || 'unknown' }}
+          color: "purple"
+          logo: "tor"
+          logoColor: "white"
 
       # -----------------------------------------------------------------
       # STAGE 4: TRIVY LIBRARY SCANS & PUBLISH
