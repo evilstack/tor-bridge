@@ -1,4 +1,4 @@
-wname: Build, Scan, and Push Images
+name: Build, Scan, and Push Images
 
 on:
   pull_request:
