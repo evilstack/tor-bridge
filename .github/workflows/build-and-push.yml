@@ -82,7 +82,7 @@ jobs:
       # STAGE 2: BUILD & SCAN BASE OS CONTAINER (Fail Fast)
       # -----------------------------------------------------------------
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       - name: Build Base OS Stage
         uses: docker/build-push-action@v7
