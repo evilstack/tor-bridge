@@ -1,0 +1,37 @@
+name: Update Tor Version Badge
+
+on:
+  workflow_run:
+    workflows: ["Build, Scan, and Push Images"]
+    types:
+      - completed
+
+jobs:
+  update-badge:
+  if: ${{ github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main' }}
+  runs-on: ubuntu-latest
+  steps:
+    - name: Download Tor Version Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: tor-version-artifact
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Read Version into Environment Variable
+        run: |
+          TOR_VER=$(cat tor_version.txt | xargs)
+          echo "Extracted Version: $TOR_VER"
+          echo "TOR_VER=${TOR_VER:-unknown}" >> $GITHUB_ENV
+
+    - name: Update Tor Version Badge Gist
+      uses: schneegans/dynamic-badges-action@v1.9.0
+      with:
+        auth: ${{ secrets.GIST_SECRET_TOKEN }}
+        gistID: "5aed119df3ac047fb3e06085fe0bcfb7"
+        filename: tor-version.json
+        label: "Tor Version"
+        message: ${{ env.TOR_VER || 'unknown' }}
+        color: "purple"
+        namedLogo: "tor-project"
+        logoColor: "white"
