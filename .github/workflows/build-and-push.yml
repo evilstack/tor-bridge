@@ -99,10 +99,10 @@ jobs:
         uses: 'aquasecurity/trivy-action@v0.36.0'
         with:
           image-ref: 'local-tor-base:${{ github.sha }}'
-          format: 'table'
-          # format: 'sarif'
-          # output: 'trivy-os-${{ matrix.target }}.sarif'
-          exit-code: '0'
+          # format: 'table'
+          format: 'sarif'
+          output: '${{ github.workspace }}/trivy-os-${{ matrix.target }}.sarif'
+          exit-code: '1'
           ignore-unfixed: true
           trivyignores: '.trivyignore-os'
           vuln-type: 'os'
