@@ -24,7 +24,7 @@ env:
   WEBTUNNEL_VERSION: '0.0.5'
   LYREBIRD_VERSION: '0.8.1'
   GO_VERSION: '1.25'
-  TRIVY_VERSION: '0.36.0'
+
 jobs:
   build-scan-push:
     runs-on: ubuntu-latest
@@ -101,7 +101,7 @@ jobs:
           image-ref: 'local-tor-base:${{ github.sha }}'
           # format: 'table'
           format: 'sarif'
-          output: '${{ github.workspace }}/trivy-os-${{ matrix.target }}.sarif'
+          output: 'trivy-os-${{ matrix.target }}.sarif'
           exit-code: '1'
           ignore-unfixed: true
           trivyignores: '.trivyignore-os'
@@ -154,9 +154,9 @@ jobs:
         if: success() || failure()
         with:
           image-ref: 'local-tor-${{ matrix.target }}:${{ github.sha }}'
-          format: 'table'
-          # format: 'sarif'
-          # output: 'trivy-lib-critical-${{ matrix.target }}.sarif'
+          # format: 'table'
+          format: 'sarif'
+          output: 'trivy-lib-critical-${{ matrix.target }}.sarif'
           exit-code: '1'
           ignore-unfixed: true
           trivyignores: '.trivyignore-lib'
@@ -175,9 +175,9 @@ jobs:
         if: success() || failure()
         with:
           image-ref: 'local-tor-${{ matrix.target }}:${{ github.sha }}'
-          format: 'table'
-          # format: 'sarif'
-          # output: 'trivy-lib-high-${{ matrix.target }}.sarif'
+          # format: 'table'
+          format: 'sarif'
+          output: 'trivy-lib-high-${{ matrix.target }}.sarif'
           exit-code: '0'
           ignore-unfixed: true
           trivyignores: '.trivyignore-lib'
