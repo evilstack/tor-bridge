@@ -160,7 +160,6 @@ jobs:
           trivyignores: '.trivyignore-lib'
           vuln-type: 'library'
           severity: 'CRITICAL'
-          skip-setup-trivy: true
 
       - name: Publish Trivy Library Critical SARIF
         uses: github/codeql-action/upload-sarif@v4
@@ -181,7 +180,6 @@ jobs:
           trivyignores: '.trivyignore-lib'
           vuln-type: 'library'
           severity: 'HIGH'
-          skip-setup-trivy: true
 
       - name: Publish Trivy Library High SARIF
         uses: github/codeql-action/upload-sarif@v4
