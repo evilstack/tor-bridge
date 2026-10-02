@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-ARG DEBIAN_RELEASE=bookworm
+ARG DEBIAN_RELEASE=trixie
 ARG GO_VERSION=1.25
 
 ########################################
