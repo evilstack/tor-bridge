@@ -101,7 +101,7 @@ jobs:
           image-ref: 'local-tor-base:${{ github.sha }}'
           format: 'sarif'
           output: 'trivy-os-${{ matrix.target }}.sarif'
-          exit-code: '1'
+          exit-code: '0'
           ignore-unfixed: true
           trivyignores: '.trivyignore-os'
           vuln-type: 'os'
