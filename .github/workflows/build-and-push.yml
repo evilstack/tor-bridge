@@ -104,7 +104,6 @@ jobs:
           exit-code: '1'
           ignore-unfixed: true
           trivyignores: '.trivyignore-os'
-          scanners: 'vuln'
           vuln-type: 'os'
           severity: 'CRITICAL,HIGH'
 
@@ -159,7 +158,6 @@ jobs:
           exit-code: '1'
           ignore-unfixed: true
           trivyignores: '.trivyignore-lib'
-          scanners: 'vuln'
           vuln-type: 'library'
           severity: 'CRITICAL'
           skip-setup-trivy: true
@@ -181,7 +179,6 @@ jobs:
           exit-code: '0'
           ignore-unfixed: true
           trivyignores: '.trivyignore-lib'
-          scanners: 'vuln'
           vuln-type: 'library'
           severity: 'HIGH'
           skip-setup-trivy: true
