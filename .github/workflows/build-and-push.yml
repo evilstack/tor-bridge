@@ -106,7 +106,9 @@ jobs:
           ignore-unfixed: true
           trivyignores: '.trivyignore-os'
           vuln-type: 'os'
+          scanners: 'vuln'
           severity: 'CRITICAL,HIGH'
+          version: 'v0.75.0'
 
       - name: Upload OS scan results
         uses: github/codeql-action/upload-sarif@v4
@@ -161,7 +163,9 @@ jobs:
           ignore-unfixed: true
           trivyignores: '.trivyignore-lib'
           vuln-type: 'library'
+          scanners: 'vuln'
           severity: 'CRITICAL'
+          version: 'v0.75.0'
 
       - name: Publish Trivy Library Critical SARIF
         uses: github/codeql-action/upload-sarif@v4
@@ -182,7 +186,9 @@ jobs:
           ignore-unfixed: true
           trivyignores: '.trivyignore-lib'
           vuln-type: 'library'
+          scanners: 'vuln'
           severity: 'HIGH'
+          version: 'v0.75.0'
 
       - name: Publish Trivy Library High SARIF
         uses: github/codeql-action/upload-sarif@v4
