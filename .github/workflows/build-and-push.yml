@@ -111,7 +111,7 @@ jobs:
 
       - name: Upload OS scan results
         uses: github/codeql-action/upload-sarif@v4
-        if: always()
+        if: hashFiles(format('trivy-os-results.sarif')) != ''
         with:
           sarif_file: 'trivy-os-results.sarif'
           category: 'trivy-os'
