@@ -99,9 +99,9 @@ jobs:
         uses: 'aquasecurity/trivy-action@v0.36.0'
         with:
           image-ref: 'local-tor-base:${{ github.sha }}'
-          #format: 'sarif'
-          format: 'table'
-          #output: 'trivy-os-results.sarif'
+          format: 'sarif'
+          #format: 'table'
+          output: 'trivy-os-${{ matrix.target }}.sarif'
           exit-code: '1'
           ignore-unfixed: true
           trivyignores: '.trivyignore-os'
@@ -111,10 +111,10 @@ jobs:
 
       - name: Upload OS scan results
         uses: github/codeql-action/upload-sarif@v4
-        if: hashFiles(format('trivy-os-results.sarif')) != ''
+        if: (success() || failure()) && hashFiles(format('trivy-os-{0}.sarif', matrix.target)) != ''
         with:
-          sarif_file: 'trivy-os-results.sarif'
-          category: 'trivy-os'
+          sarif_file: 'trivy-os-${{ matrix.target }}.sarif'
+          category: 'trivy-os-${{ matrix.target }}'
 
       # -----------------------------------------------------------------
       # STAGE 3: BUILD TARGET IMAGE & EXTRACT METADATA
