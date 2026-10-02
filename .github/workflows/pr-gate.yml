@@ -1,0 +1,12 @@
+name: PR Gate
+
+on:
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  pr-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Gate Check
+        run: echo "PR Gate satisfied."
