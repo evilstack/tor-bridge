@@ -100,7 +100,7 @@ jobs:
         with:
           image-ref: 'local-tor-base:${{ github.sha }}'
           format: 'sarif'
-          output: 'trivy-os-results.sarif'
+          output: 'trivy-os-${{ matrix.target }}.sarif'
           exit-code: '1'
           ignore-unfixed: true
           trivyignores: '.trivyignore-os'
@@ -110,10 +110,10 @@ jobs:
 
       - name: Upload OS scan results
         uses: github/codeql-action/upload-sarif@v4
-        if: always()
+        if: (success() || failure()) && hashFiles(format('trivy-os-{0}.sarif', matrix.target)) != ''
         with:
-          sarif_file: 'trivy-os-results.sarif'
-          category: 'trivy-os'
+          sarif_file: 'trivy-os-${{ matrix.target }}.sarif'
+          category: 'trivy-os-${{ matrix.target }}'
 
       # -----------------------------------------------------------------
       # STAGE 3: BUILD TARGET IMAGE & EXTRACT METADATA
@@ -151,9 +151,11 @@ jobs:
       # -----------------------------------------------------------------
       - name: Trivy - Scan App Libraries (Fail Critical)
         uses: 'aquasecurity/trivy-action@v0.36.0'
+        if: success() || failure()
         with:
           image-ref: 'local-tor-${{ matrix.target }}:${{ github.sha }}'
-          format: 'github'
+          format: 'sarif'
+          output: 'trivy-lib-critical-${{ matrix.target }}.sarif'
           exit-code: '1'
           ignore-unfixed: true
           trivyignores: '.trivyignore-lib'
@@ -162,8 +164,16 @@ jobs:
           severity: 'CRITICAL'
           skip-setup-trivy: true
 
+      - name: Publish Trivy Library Critical SARIF
+        uses: github/codeql-action/upload-sarif@v4
+        if: (success() || failure()) && hashFiles(format('trivy-lib-critical-{0}.sarif', matrix.target)) != ''
+        with:
+          sarif_file: 'trivy-lib-critical-${{ matrix.target }}.sarif'
+          category: 'trivy-lib-critical-${{ matrix.target }}'
+
       - name: Trivy - Scan App Libraries (Report High)
         uses: 'aquasecurity/trivy-action@v0.36.0'
+        if: success() || failure()
         with:
           image-ref: 'local-tor-${{ matrix.target }}:${{ github.sha }}'
           format: 'sarif'
@@ -178,7 +188,7 @@ jobs:
 
       - name: Publish Trivy Library High SARIF
         uses: github/codeql-action/upload-sarif@v4
-        if: hashFiles(format('trivy-lib-high-{0}.sarif', matrix.target)) != ''
+        if: (success() || failure()) && hashFiles(format('trivy-lib-high-{0}.sarif', matrix.target)) != ''
         with:
           sarif_file: 'trivy-lib-high-${{ matrix.target }}.sarif'
           category: 'trivy-lib-high-${{ matrix.target }}'
