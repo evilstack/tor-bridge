@@ -30,8 +30,8 @@ jobs:
         auth: ${{ secrets.GIST_SECRET_TOKEN }}
         gistID: "5aed119df3ac047fb3e06085fe0bcfb7"
         filename: tor-version.json
-        label: "Tor Version"
+        label: "Tor"
         message: ${{ env.TOR_VER || 'unknown' }}
-        color: "purple"
+        color: "291B3E"
         namedLogo: "tor-project"
-        logoColor: "white"
+        logoColor: "FF64DA"
