@@ -166,6 +166,7 @@ jobs:
           scanners: 'vuln'
           severity: 'CRITICAL'
           version: 'v0.75.0'
+          skip-setup-trivy: true
 
       - name: Publish Trivy Library Critical SARIF
         uses: github/codeql-action/upload-sarif@v4
@@ -189,6 +190,7 @@ jobs:
           scanners: 'vuln'
           severity: 'HIGH'
           version: 'v0.75.0'
+          skip-setup-trivy: true
 
       - name: Publish Trivy Library High SARIF
         uses: github/codeql-action/upload-sarif@v4
