@@ -19,10 +19,10 @@ jobs:
         github-token: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Read Version into Environment Variable
-        run: |
-          TOR_VER=$(cat tor_version.txt | xargs)
-          echo "Extracted Version: $TOR_VER"
-          echo "TOR_VER=${TOR_VER:-unknown}" >> $GITHUB_ENV
+      run: |
+        TOR_VER=$(cat tor_version.txt | xargs)
+        echo "Extracted Version: $TOR_VER"
+        echo "TOR_VER=${TOR_VER:-unknown}" >> $GITHUB_ENV
 
     - name: Update Tor Version Badge Gist
       uses: schneegans/dynamic-badges-action@v1.9.0
