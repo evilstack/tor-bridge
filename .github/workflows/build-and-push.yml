@@ -24,6 +24,7 @@ env:
   WEBTUNNEL_VERSION: '0.0.5'
   LYREBIRD_VERSION: '0.8.1'
   GO_VERSION: '1.25'
+  DEBIAN_RELEASE: trixie
 
 jobs:
   build-scan-push:
@@ -226,7 +227,9 @@ jobs:
           images: |
             ghcr.io/${{ env.IMAGE_NAME_LOWER }}/tor-${{ matrix.target }}
           labels: |
-            org.opencontainers.image.title=Tor (${{ matrix.target }}) Bridge
+            org.opencontainers.image.base.name=docker.io/library/debian:${{ env.DEBIAN_RELEASE }}-slim
+            org.opencontainers.image.base.version=${{ env.DEBIAN_RELEASE }}-slim
+            org.opencontainers.image.title=Tor ${{ matrix.target }} Bridge
             org.opencontainers.image.description=Tor bridge container image with ${{ matrix.target }} transport
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.torproject.tor.version=${{ env.TOR_VER }}
@@ -246,6 +249,7 @@ jobs:
           provenance: true
           sbom: true
           build-args: |
+            DEBIAN_RELEASE=${{ env.DEBIAN_RELEASE }}
             WEBTUNNEL_VERSION=${{ env.WEBTUNNEL_VERSION }}
             LYREBIRD_VERSION=${{ env.LYREBIRD_VERSION }}
           tags: ${{ steps.meta.outputs.tags }}
