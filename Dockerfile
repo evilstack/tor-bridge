@@ -10,6 +10,7 @@ FROM debian:${DEBIAN_RELEASE}-slim AS base
 ARG DEBIAN_RELEASE
 ARG TOR_APT_KEY_FINGERPRINT="A3C4 F0F9 79CA A22C DBA8  F512 EE8C BC9E 886D DD89"
 
+# hadolint ignore=DL3008
 RUN set -eux; \
     apt-get update; \
     apt-get install -y --no-install-recommends \
