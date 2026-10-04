@@ -2,6 +2,7 @@ name: CI & Quality Checks
 
 on:
   push:
+    branches: [main]
   pull_request:
 
 concurrency:
@@ -12,6 +13,16 @@ permissions:
   contents: read
 
 jobs:
+  lint-workflows:
+    name: Lint Workflows
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v7
+
+      - name: actionlint
+        uses: rhysd/actionlint@v1.7.12
+
   lint-dockerfile:
     name: Lint Dockerfile
     runs-on: ubuntu-latest

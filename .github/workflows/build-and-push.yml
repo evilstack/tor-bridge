@@ -136,11 +136,11 @@ jobs:
 
       - name: Extract Installed Tor Version
         run: |
-          RAW_VER=$(docker run --rm --entrypoint "" local-tor-${{ matrix.target }}:${{ github.sha }} tor --version 2>&1)
-          TOR_VER=$(echo "$RAW_VER" | grep -oP 'Tor version \K[0-9]+(\.[0-9]+)+' | head -n 1)
-          TOR_VER=${TOR_VER:-unknown}
+          RAW_VER="$(docker run --rm --entrypoint "" local-tor-${{ matrix.target }}:${{ github.sha }} tor --version 2>&1)"
+          TOR_VER="$(echo "$RAW_VER" | grep -oP 'Tor version \K[0-9]+(\.[0-9]+)+' | head -n 1)"
+          TOR_VER="${TOR_VER:-unknown}"
           echo "$TOR_VER" > tor_version.txt
-          echo "TOR_VER=${TOR_VER}" >> $GITHUB_ENV
+          echo "TOR_VER=${TOR_VER}" >> "$GITHUB_ENV"
 
       - name: Upload Tor Version Artifact
         uses: actions/upload-artifact@v4
@@ -210,14 +210,14 @@ jobs:
 
       - name: Lowercase Image Name
         run: |
-          echo "IMAGE_NAME_LOWER=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
+          echo "IMAGE_NAME_LOWER=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_ENV"
 
       - name: Set Transport Version Variable
         run: |
           if [ "${{ matrix.target }}" = "obfs4" ]; then
-            echo "TRANSPORT_VER=lyrebird-${{ env.LYREBIRD_VERSION }}" >> $GITHUB_ENV
+            echo "TRANSPORT_VER=lyrebird-${{ env.LYREBIRD_VERSION }}" >> "$GITHUB_ENV"
           else
-            echo "TRANSPORT_VER=webtunnel-${{ env.WEBTUNNEL_VERSION }}" >> $GITHUB_ENV
+            echo "TRANSPORT_VER=webtunnel-${{ env.WEBTUNNEL_VERSION }}" >> "$GITHUB_ENV"
           fi
 
       - name: Docker Metadata
