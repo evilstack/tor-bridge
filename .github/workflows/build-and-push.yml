@@ -255,9 +255,9 @@ jobs:
             TOR_VERSION=${{ needs.versions.outputs.tor_version }}
             ${{ matrix.pt_arg }}=${{ matrix.pt_version }}
           labels: ${{ steps.oci.outputs.labels }}
-          annotations: ${{ steps.oci.outputs.annotations }}
-          provenance: mode=max
-          sbom: true
+          annotations: ${{ env.PUBLISH == 'true' && steps.oci.outputs.annotations || '' }}
+          provenance: ${{ env.PUBLISH == 'true' && 'mode=max' || 'false' }}
+          sbom: ${{ env.PUBLISH == 'true' }}
           outputs: ${{ env.PUBLISH == 'true' && format('type=image,name={0},push-by-digest=true,name-canonical=true,push=true', env.IMAGE) || 'type=docker,dest=/tmp/image.tar' }}
           cache-from: type=gha,scope=${{ matrix.target }}
           cache-to: type=gha,scope=${{ matrix.target }},mode=max
@@ -272,6 +272,8 @@ jobs:
           build-args: |
             TOR_VERSION=${{ needs.versions.outputs.tor_version }}
             ${{ matrix.pt_arg }}=${{ matrix.pt_version }}
+          provenance: false
+          sbom: false
           outputs: type=cacheonly
           cache-from: type=gha,scope=${{ matrix.target }}
 
