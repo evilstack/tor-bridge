@@ -55,9 +55,10 @@ RUN set -eux; \
 # writes ./versions-out/versions.env
 ########################################
 FROM apt-base AS resolve
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 # throwaway stage: apt lists are intentionally not cleaned
 # hadolint ignore=DL3009
-RUN set -euxo pipefail; \
+RUN set -eux; \
     apt-get update; \
     for p in tor lyrebird webtunnel; do \
         v="$(apt-cache policy "$p" | awk '/^  Candidate:/ {print $2}')"; \
