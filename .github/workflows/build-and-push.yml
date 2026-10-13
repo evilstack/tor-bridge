@@ -316,7 +316,7 @@ jobs:
             else
               src=(--input "/work/image-${p}.tar")
             fi
-            args=(image --scanners vuln "--pkg-types os,library" --ignore-unfixed
+            args=(image --scanners vuln --pkg-types os,library --ignore-unfixed
                   --format json --output "/work/trivy-${p}.json" --exit-code 0)
             if [ -f .trivyignore ]; then args+=(--ignorefile /work/.trivyignore); fi
             echo "::group::Trivy ${p}"
