@@ -1,12 +1,9 @@
 name: Build, Scan, Publish
 
-# Replaces: build-and-push.yml, pr-gate.yml, update-tor-badge.yml.
 # Images are multi-arch (linux/amd64 + linux/arm64). arm64 is built under QEMU on a standard runner:
-# nothing is compiled any more (apt install only), so emulation is cheap and works on private repos too.
+# nothing is compiled (apt install only).
 # Set ONE required status check in branch protection: "CI success" (job `ci-success`).
 #
-# grep -rn 'TODO(pin)' .github/   -> every action still to be pinned by commit SHA
-# (the all-zero SHAs below are deliberate placeholders and will fail until replaced).
 
 on:
   push:
@@ -29,7 +26,7 @@ env:
   IMAGE_AUTHORS: "evilstack"
   OBFS4_LICENSES: "BSD-3-Clause AND GPL-3.0-or-later AND BSD-2-Clause"
   WEBTUNNEL_LICENSES: "BSD-3-Clause AND MIT"
-  TRIVY_IMAGE: ghcr.io/aquasecurity/trivy@sha256:1641c5921a3cc94e68bee643385786002a1faafd9a0d87a7c3eb936fd4aa8b29
+  TRIVY_IMAGE: ghcr.io/aquasecurity/trivy@sha256:af6acf9a6b85dfe389a1941505c0ce9efef52a4719635e1a962f022a3d855daa
 
 jobs:
   # ---------------------------------------------------------------------------
@@ -255,9 +252,9 @@ jobs:
             TOR_VERSION=${{ needs.versions.outputs.tor_version }}
             ${{ matrix.pt_arg }}=${{ matrix.pt_version }}
           labels: ${{ steps.oci.outputs.labels }}
-          annotations: ${{ steps.oci.outputs.annotations }}
-          provenance: mode=max
-          sbom: true
+          annotations: ${{ env.PUBLISH == 'true' && steps.oci.outputs.annotations || '' }}
+          provenance: ${{ env.PUBLISH == 'true' && 'mode=max' || 'false' }}
+          sbom: ${{ env.PUBLISH == 'true' }}
           outputs: ${{ env.PUBLISH == 'true' && format('type=image,name={0},push-by-digest=true,name-canonical=true,push=true', env.IMAGE) || 'type=docker,dest=/tmp/image.tar' }}
           cache-from: type=gha,scope=${{ matrix.target }}
           cache-to: type=gha,scope=${{ matrix.target }},mode=max
@@ -272,6 +269,8 @@ jobs:
           build-args: |
             TOR_VERSION=${{ needs.versions.outputs.tor_version }}
             ${{ matrix.pt_arg }}=${{ matrix.pt_version }}
+          provenance: false
+          sbom: false
           outputs: type=cacheonly
           cache-from: type=gha,scope=${{ matrix.target }}
 
@@ -295,10 +294,8 @@ jobs:
       # Gating happens separately below. (With --exit-code 1, findings and fatal errors both
       # exit 1 and cannot be told apart.)
       #
-      # On main, each platform of the pushed digest is scanned straight from GHCR, anonymously:
-      # the packages must be public (they are, if you distribute them), and the write token never
-      # reaches the scanner container. If your packages are private, set the repository variable
-      # TRIVY_REGISTRY_AUTH=true to hand Trivy the token anyway.
+      # On main, each platform of the pushed digest is scanned straight from GHCR anonymously.
+      # The write token never reaches the scanner container.
       - name: Trivy scan (JSON, no gating)
         env:
           TRIVY_DEBUG: ${{ runner.debug == '1' && 'true' || 'false' }}
@@ -498,7 +495,7 @@ jobs:
           gh attestation verify "oci://${IMAGE}@${DIGEST}" --repo "$GITHUB_REPOSITORY"
 
   # ---------------------------------------------------------------------------
-  # 4. Tor version badge (replaces update-tor-badge.yml; no workflow_run, no artifacts)
+  # 4. Update Tor version badge; no workflow_run, no artifacts.
   # ---------------------------------------------------------------------------
   badge:
     name: Update Tor version badge
