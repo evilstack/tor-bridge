@@ -57,7 +57,7 @@ RUN set -eux; \
 FROM apt-base AS resolve
 # throwaway stage: apt lists are intentionally not cleaned
 # hadolint ignore=DL3009
-RUN set -eu; \
+RUN set -euxo pipefail; \
     apt-get update; \
     for p in tor lyrebird webtunnel; do \
         v="$(apt-cache policy "$p" | awk '/^  Candidate:/ {print $2}')"; \
