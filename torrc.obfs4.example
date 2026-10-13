@@ -1,0 +1,18 @@
+# Example base torrc for obfs4 bridge
+# Mount a real config over /etc/tor/torrc
+
+RunAsDaemon 0
+SocksPort 0
+BridgeRelay 1
+
+DataDirectory /var/lib/tor
+Log notice stdout
+
+ORPort 9001
+ExtORPort auto
+
+ServerTransportPlugin obfs4 exec /usr/bin/lyrebird
+ServerTransportListenAddr obfs4 0.0.0.0:9002
+
+ContactInfo <you@domain.tld>
+Nickname <bridge nickname>
