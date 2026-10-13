@@ -1,0 +1,3 @@
+# Upstream releases the files in this directory were copied from (scripts/fetch-upstream-licenses.sh)
+lyrebird 0.9.0 89d54872b176f936232ff39f7a8189b77d83d65e
+webtunnel v0.0.7 11334a222c1beeb45759d436b7aef963a10600b2

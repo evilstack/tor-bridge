@@ -1,0 +1,8 @@
+# Allowlist: only what the Dockerfile actually uses is sent to the builder.
+*
+!scripts/tpo-install.sh
+!torrc.obfs4.example
+!torrc.webtunnel.example
+!LICENSE
+!NOTICE
+!licenses

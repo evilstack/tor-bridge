@@ -1,0 +1,95 @@
+tor-bridge: NOTICE
+==================
+
+This file lists the software that ends up in the images published from this repository
+(ghcr.io/evilstack/tor-bridge/tor-obfs4 and ghcr.io/evilstack/tor-bridge/tor-webtunnel) and the
+licenses it is under. Each image also contains this file at /usr/share/doc/tor-bridge/NOTICE.
+It is a good-faith summary, not legal advice.
+
+
+1. This repository (the packaging)
+----------------------------------
+
+The Dockerfile, scripts, CI workflows, example torrc files and documentation in this repository
+are licensed under the MIT License (see LICENSE).
+
+Copyright (c) 2026 evilstack
+
+This license covers those files only. It does not change the license of any software installed
+in the images.
+
+
+2. Software in the images
+-------------------------
+
+Tor (both images)
+  License:    BSD-3-Clause. Upstream's LICENSE file also lists the licenses of some bundled
+              third-party code.
+  Copyright:  Roger Dingledine, Nick Mathewson, The Tor Project, Inc. and others
+              (see upstream LICENSE).
+  Upstream:   https://gitlab.torproject.org/tpo/core/tor
+  Installed from the Tor Project's apt repository (deb.torproject.org). The tor and
+  tor-geoipdb packages' own copyright files are in /usr/share/doc/<package>/copyright inside the
+  image, where the packages provide them.
+
+Lyrebird (tor-obfs4 image)
+  License:    GPL-3.0-or-later for the work as a whole, with some files under BSD-2-Clause. This is
+              how Debian's packaging review of lyrebird classifies it; upstream's repository
+              carries both a BSD-2-Clause and a GPL-3.0 license file. The upstream files for the
+              packaged release are in /usr/share/doc/tor-bridge/licenses/lyrebird/ and are
+              authoritative if they differ from this summary.
+  Copyright:  2014-2023 Yawning Angel; 2023 The Tor Project.
+  Upstream:   https://gitlab.torproject.org/tpo/anti-censorship/pluggable-transports/lyrebird
+              (a fork and continuation of Yawning Angel's obfs4proxy)
+  Installed from the Tor Project's apt repository as a prebuilt binary.
+
+WebTunnel (tor-webtunnel image)
+  License:    MIT (upstream license file: /usr/share/doc/tor-bridge/licenses/webtunnel/).
+  Copyright:  2022 The Tor Project.
+  Upstream:   https://gitlab.torproject.org/tpo/anti-censorship/pluggable-transports/webtunnel
+  Installed from the Tor Project's apt repository as a prebuilt binary. Only the server binary
+  (webtunnel-server) is kept in the image; webtunnel-client is excluded at install time.
+
+Go modules statically linked into the lyrebird and webtunnel binaries
+  Each module is under its own license. The module list and versions are embedded in the
+  binaries (go version -m /usr/bin/lyrebird) and in the SBOM attached to each image
+  (docker buildx imagetools inspect <image> --format '{{ json .SBOM }}').
+
+Debian (trixie-slim base image and the packages installed from the Debian archive)
+  Various licenses (GPL, LGPL, BSD, MIT, and others). Each package's copyright file is in
+  /usr/share/doc/<package>/copyright inside the image. The text of the GNU GPL v3 is at
+  /usr/share/common-licenses/GPL-3.
+  https://www.debian.org/
+
+
+3. License texts in the images
+------------------------------
+
+  /usr/share/doc/tor-bridge/LICENSE                    packaging license (MIT)
+  /usr/share/doc/tor-bridge/NOTICE                     this file
+  /usr/share/doc/tor-bridge/licenses/lyrebird/         upstream lyrebird license files  (tor-obfs4)
+  /usr/share/doc/tor-bridge/licenses/webtunnel/        upstream webtunnel license files (tor-webtunnel)
+  /usr/share/doc/<package>/copyright                   Debian packages, where provided
+  /usr/share/common-licenses/                          common license texts (GPL, LGPL, ...)
+
+
+4. Source code
+--------------
+
+For the GPL-licensed components (lyrebird, and various Debian packages):
+
+  * Lyrebird: the upstream repository above, at the tag matching the version recorded in the
+    image labels (the Tor Project's package version, e.g. 0.9.0+tpo-1, corresponds to upstream
+    tag lyrebird-0.9.0).
+  * Packages from the Tor Project's apt repository: source packages are available from the same
+    repository (add a deb-src line for deb.torproject.org to your apt sources and run
+    "apt-get source <package>").
+  * Debian packages: apt-get source <package>, or https://sources.debian.org/.
+  * This repository holds the Dockerfile and scripts used to assemble the images.
+
+
+5. Trademarks
+-------------
+
+"Tor" and the Tor logo are trademarks of The Tor Project, Inc. This project is not affiliated
+with or endorsed by The Tor Project.

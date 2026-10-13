@@ -1,0 +1,539 @@
+name: Build, Scan, Publish
+
+# Replaces: build-and-push.yml, pr-gate.yml, update-tor-badge.yml.
+# Images are multi-arch (linux/amd64 + linux/arm64). arm64 is built under QEMU on a standard runner:
+# nothing is compiled any more (apt install only), so emulation is cheap and works on private repos too.
+# Set ONE required status check in branch protection: "CI success" (job `ci-success`).
+#
+# grep -rn 'TODO(pin)' .github/   -> every action still to be pinned by commit SHA
+# (the all-zero SHAs below are deliberate placeholders and will fail until replaced).
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: '17 3 * * *'   # daily; targets whose inputs are unchanged are skipped
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  # Never cancel a run that may be publishing; only supersede PR runs.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions: {}
+
+env:
+  LABEL_NS: com.github.evilstack.tor-bridge
+  IMAGE_AUTHORS: "evilstack"
+  OBFS4_LICENSES: "BSD-3-Clause AND GPL-3.0-or-later AND BSD-2-Clause"
+  WEBTUNNEL_LICENSES: "BSD-3-Clause AND MIT"
+  TRIVY_IMAGE: ghcr.io/aquasecurity/trivy@sha256:1641c5921a3cc94e68bee643385786002a1faafd9a0d87a7c3eb936fd4aa8b29
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # 1. Resolve current package versions from deb.torproject.org (signature-verified
+  #    inside the build, see the Dockerfile `versions` stage) and decide what to build.
+  # ---------------------------------------------------------------------------
+  versions:
+    name: Resolve package versions
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+    outputs:
+      matrix: ${{ steps.matrix.outputs.matrix }}
+      tor_version: ${{ steps.parse.outputs.tor_version }}
+      tor_upstream: ${{ steps.parse.outputs.tor_upstream }}
+      base_digest: ${{ steps.parse.outputs.base_digest }}
+    steps:
+      - name: Check required settings
+        run: |
+          set -eu
+          for v in LABEL_NS IMAGE_AUTHORS TRIVY_IMAGE; do
+            val="$(printenv "$v")"
+            case "$val" in
+              *TODO*) echo "::error::$v still contains a TODO placeholder"; exit 1 ;;
+            esac
+          done
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Resolve current Tor Project package versions
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          target: versions
+          no-cache-filters: resolve
+          outputs: type=local,dest=./versions-out
+
+      - name: Validate and parse versions
+        id: parse
+        run: |
+          set -euo pipefail
+          f=versions-out/versions.env
+          if grep -Evx '(TOR|LYREBIRD|WEBTUNNEL)_VERSION=[A-Za-z0-9.+~-]+' "$f"; then
+            echo "::error::unexpected content in $f"; exit 1
+          fi
+          get() { grep -m1 "^$1=" "$f" | cut -d= -f2-; }
+          tor="$(get TOR_VERSION)"; lyre="$(get LYREBIRD_VERSION)"; wt="$(get WEBTUNNEL_VERSION)"
+          if [ -z "$tor" ] || [ -z "$lyre" ] || [ -z "$wt" ]; then
+            echo "::error::missing version in $f"; exit 1
+          fi
+          up() { printf '%s' "$1" | grep -oE '^[0-9]+(\.[0-9]+)*'; }
+          # Digest of the pinned base image (empty if the Dockerfile FROM is not pinned yet).
+          base_digest="$(grep -m1 -oE '@sha256:[a-f0-9]{64}' Dockerfile | cut -c2- || true)"
+          if [ -z "$base_digest" ]; then
+            echo "::warning::Dockerfile FROM is not pinned by digest; base image changes will not be detected by the scheduled check"
+          fi
+          {
+            echo "tor_version=$tor"
+            echo "lyrebird_version=$lyre"
+            echo "webtunnel_version=$wt"
+            echo "tor_upstream=$(up "$tor")"
+            echo "lyrebird_upstream=$(up "$lyre")"
+            echo "webtunnel_upstream=$(up "$wt")"
+            echo "base_digest=$base_digest"
+          } >> "$GITHUB_OUTPUT"
+          cat "$f"
+
+      - name: Log in to GHCR (scheduled comparison)
+        if: github.event_name == 'schedule'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: echo "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+
+      - name: Decide what to build
+        id: matrix
+        env:
+          TOR_VERSION: ${{ steps.parse.outputs.tor_version }}
+          LYREBIRD_VERSION: ${{ steps.parse.outputs.lyrebird_version }}
+          WEBTUNNEL_VERSION: ${{ steps.parse.outputs.webtunnel_version }}
+          LYREBIRD_UPSTREAM: ${{ steps.parse.outputs.lyrebird_upstream }}
+          WEBTUNNEL_UPSTREAM: ${{ steps.parse.outputs.webtunnel_upstream }}
+          BASE_DIGEST: ${{ steps.parse.outputs.base_digest }}
+        run: |
+          set -euo pipefail
+          image_base="ghcr.io/${GITHUB_REPOSITORY,,}"
+          matrix='[]'
+
+          add_target() {
+            local target="$1" pt="$2" pt_arg="$3" pt_version="$4" pt_upstream="$5" licenses="$6"
+            local inputs="tor=${TOR_VERSION};${pt}=${pt_version};base=${BASE_DIGEST:-unpinned}"
+            if [ "$GITHUB_EVENT_NAME" = "schedule" ]; then
+              local published
+              published="$(docker buildx imagetools inspect --raw "${image_base}/tor-${target}:latest" 2>/dev/null \
+                | jq -r --arg k "${LABEL_NS}.inputs" '.annotations[$k] // empty' 2>/dev/null || true)"
+              if [ "$published" = "$inputs" ]; then
+                echo "::notice::${target}: inputs unchanged since last publish, skipping"
+                return 0
+              fi
+            fi
+            matrix="$(jq -c --arg target "$target" --arg pt "$pt" --arg pt_arg "$pt_arg" \
+              --arg pt_version "$pt_version" --arg pt_upstream "$pt_upstream" --arg inputs "$inputs" \
+              --arg licenses "$licenses" \
+              '. + [{target:$target, pt:$pt, pt_arg:$pt_arg, pt_version:$pt_version, pt_upstream:$pt_upstream, inputs:$inputs, licenses:$licenses}]' \
+              <<<"$matrix")"
+          }
+
+          add_target obfs4 lyrebird LYREBIRD_VERSION "$LYREBIRD_VERSION" "$LYREBIRD_UPSTREAM" "$OBFS4_LICENSES"
+          add_target webtunnel webtunnel WEBTUNNEL_VERSION "$WEBTUNNEL_VERSION" "$WEBTUNNEL_UPSTREAM" "$WEBTUNNEL_LICENSES"
+
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+          echo "Build matrix: $matrix"
+
+  # ---------------------------------------------------------------------------
+  # 2. Build ONCE, scan exactly that image, publish SARIF, gate.
+  #    - PRs / non-main: image is built to a local archive (never pushed).
+  #    - main: image is pushed by digest only (no tags yet) and that digest is scanned.
+  # ---------------------------------------------------------------------------
+  build-scan:
+    name: Build & scan (${{ matrix.target }})
+    needs: versions
+    if: needs.versions.outputs.matrix != '[]'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write          # push by digest (main only); not granted to fork PRs
+      security-events: write   # SARIF upload
+    env:
+      PUBLISH: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/main' }}
+      # main: build + scan both architectures. PRs / other refs: amd64 archive is scanned, arm64 is build-checked only.
+      PLATFORMS: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && 'amd64 arm64' || 'amd64' }}
+      BUILD_PLATFORMS: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && 'linux/amd64,linux/arm64' || 'linux/amd64' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.versions.outputs.matrix) }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set image name
+        env:
+          TARGET: ${{ matrix.target }}
+        run: echo "IMAGE=ghcr.io/${GITHUB_REPOSITORY,,}/tor-${TARGET}" >> "$GITHUB_ENV"
+
+      - name: Compose OCI labels and annotations
+        id: oci
+        env:
+          TARGET: ${{ matrix.target }}
+          PT: ${{ matrix.pt }}
+          PT_VERSION: ${{ matrix.pt_version }}
+          PT_UPSTREAM: ${{ matrix.pt_upstream }}
+          INPUTS: ${{ matrix.inputs }}
+          LICENSES: ${{ matrix.licenses }}
+          TOR_VERSION: ${{ needs.versions.outputs.tor_version }}
+          BASE_DIGEST: ${{ needs.versions.outputs.base_digest }}
+        run: |
+          set -euo pipefail
+          created="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          repo_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}"
+          lines=(
+            "org.opencontainers.image.title=Tor ${TARGET} bridge (unofficial)"
+            "org.opencontainers.image.description=Unofficial Tor bridge image: Tor Project tor + ${PT} (${TARGET}), packaged from deb.torproject.org"
+            "org.opencontainers.image.source=${repo_url}"
+            "org.opencontainers.image.url=${repo_url}"
+            "org.opencontainers.image.documentation=${repo_url}#readme"
+            "org.opencontainers.image.authors=${IMAGE_AUTHORS}"
+            "org.opencontainers.image.licenses=${LICENSES}"
+            "org.opencontainers.image.version=${PT_UPSTREAM}"
+            "org.opencontainers.image.revision=${GITHUB_SHA}"
+            "org.opencontainers.image.created=${created}"
+            "org.opencontainers.image.base.name=docker.io/library/debian:trixie-slim"
+            "${LABEL_NS}.packaging.license=MIT"
+            "${LABEL_NS}.tor.version=${TOR_VERSION}"
+            "${LABEL_NS}.transport=${PT}"
+            "${LABEL_NS}.transport.version=${PT_VERSION}"
+            "${LABEL_NS}.inputs=${INPUTS}"
+          )
+          if [ -n "$BASE_DIGEST" ]; then
+            lines+=("org.opencontainers.image.base.digest=${BASE_DIGEST}")
+          fi
+          {
+            echo 'labels<<OCI_EOF'
+            printf '%s\n' "${lines[@]}"
+            echo 'OCI_EOF'
+            echo 'annotations<<OCI_EOF'
+            printf 'index:%s\n' "${lines[@]}"
+            echo 'OCI_EOF'
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Set up QEMU (arm64 emulation)
+        uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
+        with:
+          platforms: arm64
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Log in to GHCR
+        if: env.PUBLISH == 'true'
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Build image
+        id: build
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          target: ${{ matrix.target }}
+          platforms: ${{ env.BUILD_PLATFORMS }}
+          build-args: |
+            TOR_VERSION=${{ needs.versions.outputs.tor_version }}
+            ${{ matrix.pt_arg }}=${{ matrix.pt_version }}
+          labels: ${{ steps.oci.outputs.labels }}
+          annotations: ${{ steps.oci.outputs.annotations }}
+          provenance: mode=max
+          sbom: true
+          outputs: ${{ env.PUBLISH == 'true' && format('type=image,name={0},push-by-digest=true,name-canonical=true,push=true', env.IMAGE) || 'type=docker,dest=/tmp/image.tar' }}
+          cache-from: type=gha,scope=${{ matrix.target }}
+          cache-to: type=gha,scope=${{ matrix.target }},mode=max
+
+      - name: Build check (arm64, PRs and non-main only)
+        if: env.PUBLISH != 'true'
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          target: ${{ matrix.target }}
+          platforms: linux/arm64
+          build-args: |
+            TOR_VERSION=${{ needs.versions.outputs.tor_version }}
+            ${{ matrix.pt_arg }}=${{ matrix.pt_version }}
+          outputs: type=cacheonly
+          cache-from: type=gha,scope=${{ matrix.target }}
+
+      - name: Prepare amd64 archive for scanning (no push)
+        if: env.PUBLISH != 'true'
+        run: mv /tmp/image.tar image-amd64.tar
+
+      - name: Date for Trivy DB cache key
+        id: day
+        run: echo "day=$(date -u +%F)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Trivy DB
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/trivy-cache
+          key: trivy-db-${{ steps.day.outputs.day }}
+          restore-keys: trivy-db-
+
+      # The scan itself never sets --exit-code, so any non-zero exit here is a genuine Trivy
+      # failure (DB download, image/archive parse, registry access, ...) and not a finding.
+      # Gating happens separately below. (With --exit-code 1, findings and fatal errors both
+      # exit 1 and cannot be told apart.)
+      #
+      # On main, each platform of the pushed digest is scanned straight from GHCR, anonymously:
+      # the packages must be public (they are, if you distribute them), and the write token never
+      # reaches the scanner container. If your packages are private, set the repository variable
+      # TRIVY_REGISTRY_AUTH=true to hand Trivy the token anyway.
+      - name: Trivy scan (JSON, no gating)
+        env:
+          TRIVY_DEBUG: ${{ runner.debug == '1' && 'true' || 'false' }}
+          DIGEST: ${{ steps.build.outputs.digest }}
+          TRIVY_REGISTRY_AUTH: ${{ vars.TRIVY_REGISTRY_AUTH }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          cache="$RUNNER_TEMP/trivy-cache"; mkdir -p "$cache"
+          auth=()
+          if [ "${TRIVY_REGISTRY_AUTH:-}" = "true" ]; then
+            auth=(-e "TRIVY_USERNAME=${GITHUB_ACTOR}" -e "TRIVY_PASSWORD=${GH_TOKEN}")
+          fi
+          for p in $PLATFORMS; do
+            if [ "$PUBLISH" = "true" ]; then
+              case "$DIGEST" in sha256:*) ;; *) echo "::error::no image digest from build"; exit 1 ;; esac
+              src=(--image-src remote --platform "linux/${p}" "${IMAGE}@${DIGEST}")
+            else
+              src=(--input "/work/image-${p}.tar")
+            fi
+            args=(image --scanners vuln --pkg-types os,library --ignore-unfixed
+                  --format json --output "/work/trivy-${p}.json" --exit-code 0)
+            if [ -f .trivyignore ]; then args+=(--ignorefile /work/.trivyignore); fi
+            echo "::group::Trivy ${p}"
+            docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp -e TRIVY_CACHE_DIR=/cache -e TRIVY_DEBUG \
+              "${auth[@]}" -v "$PWD:/work" -v "$cache:/cache" -w /work \
+              "$TRIVY_IMAGE" "${args[@]}" "${src[@]}"
+            echo "::endgroup::"
+            test -s "trivy-${p}.json"
+          done
+
+      - name: Convert to SARIF (amd64) and print tables
+        run: |
+          set -euo pipefail
+          trivy() {
+            docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp -v "$PWD:/work" -w /work "$TRIVY_IMAGE" "$@"
+          }
+          # The Security tab gets the amd64 results; the gate below covers every scanned platform.
+          trivy convert --format sarif --output /work/trivy.sarif /work/trivy-amd64.json
+          test -s trivy.sarif
+          for f in trivy-*.json; do
+            echo "::group::${f} (HIGH+CRITICAL)"
+            trivy convert --format table --severity HIGH,CRITICAL "/work/${f}"
+            echo "::endgroup::"
+          done
+
+      - name: Upload SARIF to the Security tab
+        if: ${{ !cancelled() && hashFiles('trivy.sarif') != '' && !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork) }}
+        uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
+        with:
+          sarif_file: trivy.sarif
+          category: trivy-${{ matrix.target }}
+
+      - name: Keep raw scan results for troubleshooting
+        if: ${{ !cancelled() && hashFiles('trivy-amd64.json') != '' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: trivy-${{ matrix.target }}
+          path: |
+            trivy-*.json
+            trivy.sarif
+          retention-days: 14
+
+      - name: Gate on scan results
+        env:
+          TARGET: ${{ matrix.target }}
+        run: |
+          set -euo pipefail
+          fail=0
+          for f in trivy-*.json; do
+            p="${f#trivy-}"; p="${p%.json}"
+            os_bad="$(jq '[.Results[]? | select(.Class=="os-pkgs")   | .Vulnerabilities[]? | select(.Severity=="HIGH" or .Severity=="CRITICAL")] | length' "$f")"
+            lib_crit="$(jq '[.Results[]? | select(.Class=="lang-pkgs") | .Vulnerabilities[]? | select(.Severity=="CRITICAL")] | length' "$f")"
+            lib_high="$(jq '[.Results[]? | select(.Class=="lang-pkgs") | .Vulnerabilities[]? | select(.Severity=="HIGH")] | length' "$f")"
+            {
+              echo "### Trivy: ${TARGET} (${p})"
+              echo "- OS packages, HIGH+CRITICAL (fix available): ${os_bad}"
+              echo "- Go binaries/libraries, CRITICAL (fix available): ${lib_crit}"
+              echo "- Go binaries/libraries, HIGH (reported only): ${lib_high}"
+            } >> "$GITHUB_STEP_SUMMARY"
+            if [ "$os_bad" -gt 0 ] || [ "$lib_crit" -gt 0 ]; then
+              fail=1
+              echo "::error::Gate failed (${p}): os HIGH+CRITICAL=${os_bad}, lib CRITICAL=${lib_crit}"
+              jq -r '.Results[]? | .Class as $c | .Vulnerabilities[]?
+                     | select(($c=="os-pkgs" and (.Severity=="HIGH" or .Severity=="CRITICAL")) or ($c=="lang-pkgs" and .Severity=="CRITICAL"))
+                     | "\(.VulnerabilityID)\t\(.PkgName)\t\(.InstalledVersion) -> \(.FixedVersion)\t\(.Severity)"' "$f"
+            fi
+          done
+          exit "$fail"
+
+      - name: Save digest for the publish job
+        if: env.PUBLISH == 'true'
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: echo "$DIGEST" > digest.txt
+
+      - name: Upload digest
+        if: env.PUBLISH == 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: digest-${{ matrix.target }}
+          path: digest.txt
+          retention-days: 1
+
+  # ---------------------------------------------------------------------------
+  # 3. Publish: tag the already-scanned digest, sign it, attest provenance, self-verify.
+  #    Runs only on main (push / schedule / manual) after EVERY target passed its gate.
+  # ---------------------------------------------------------------------------
+  publish:
+    name: Publish (${{ matrix.target }})
+    needs: [versions, build-scan]
+    if: needs.build-scan.result == 'success' && github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.versions.outputs.matrix) }}
+    steps:
+      - name: Download digest
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: digest-${{ matrix.target }}
+
+      - name: Load digest and image name
+        env:
+          TARGET: ${{ matrix.target }}
+        run: |
+          set -euo pipefail
+          digest="$(cat digest.txt)"
+          if ! printf '%s' "$digest" | grep -Eq '^sha256:[0-9a-f]{64}$'; then
+            echo "::error::invalid digest"; exit 1
+          fi
+          {
+            echo "DIGEST=$digest"
+            echo "IMAGE=ghcr.io/${GITHUB_REPOSITORY,,}/tor-${TARGET}"
+          } >> "$GITHUB_ENV"
+
+      - name: Log in to GHCR
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Tag the scanned digest
+        env:
+          PT: ${{ matrix.pt }}
+          PT_UPSTREAM: ${{ matrix.pt_upstream }}
+          TOR_UPSTREAM: ${{ needs.versions.outputs.tor_upstream }}
+        run: |
+          set -euo pipefail
+          tags=("latest" "${PT}-${PT_UPSTREAM}" "${PT}-${PT_UPSTREAM}-tor${TOR_UPSTREAM}" "sha-${GITHUB_SHA::7}")
+          args=()
+          for t in "${tags[@]}"; do args+=(-t "${IMAGE}:${t}"); done
+          docker buildx imagetools create "${args[@]}" "${IMAGE}@${DIGEST}"
+          # Every tag must resolve to the digest that was scanned.
+          for t in "${tags[@]}"; do
+            got="$(docker buildx imagetools inspect "${IMAGE}:${t}" --format '{{json .Manifest}}' | jq -r .digest)"
+            if [ "$got" != "$DIGEST" ]; then
+              echo "::error::${IMAGE}:${t} resolves to ${got}, expected ${DIGEST}"; exit 1
+            fi
+          done
+          # The index must carry both architectures (attestation manifests report platform "unknown").
+          archs="$(docker buildx imagetools inspect --raw "${IMAGE}@${DIGEST}" \
+            | jq -r '[.manifests[].platform | select(.architecture != "unknown") | .architecture] | sort | join(",")')"
+          if [ "$archs" != "amd64,arm64" ]; then
+            echo "::error::expected amd64,arm64 in the published index, got: ${archs}"; exit 1
+          fi
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+
+      - name: Sign image (keyless, Sigstore)
+        run: cosign sign --yes "${IMAGE}@${DIGEST}"
+
+      - name: Attest build provenance
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-name: ${{ env.IMAGE }}
+          subject-digest: ${{ env.DIGEST }}
+          push-to-registry: true
+
+      - name: Self-verify signature and attestation
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          cosign verify \
+            --certificate-identity "https://github.com/${GITHUB_WORKFLOW_REF}" \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+            "${IMAGE}@${DIGEST}"
+          gh attestation verify "oci://${IMAGE}@${DIGEST}" --repo "$GITHUB_REPOSITORY"
+
+  # ---------------------------------------------------------------------------
+  # 4. Tor version badge (replaces update-tor-badge.yml; no workflow_run, no artifacts)
+  # ---------------------------------------------------------------------------
+  badge:
+    name: Update Tor version badge
+    needs: [versions, publish]
+    if: needs.publish.result == 'success'
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - name: Update Tor Version Badge Gist
+        uses: schneegans/dynamic-badges-action@28b0fa8bdeb46170ac397105ece0c1fe58f68910 # v1.9.0
+        with:
+          auth: ${{ secrets.GIST_SECRET_TOKEN }}
+          gistID: "5aed119df3ac047fb3e06085fe0bcfb7"
+          filename: tor-version.json
+          label: "Tor"
+          message: ${{ needs.versions.outputs.tor_upstream }}
+          color: "291B3E"
+          namedLogo: "torproject"
+          logoColor: "FF64DA"
+
+  # ---------------------------------------------------------------------------
+  # The ONE required check. Fails on failure OR cancellation; skipped jobs are fine.
+  # ---------------------------------------------------------------------------
+  ci-success:
+    name: CI success
+    needs: [versions, build-scan, publish, badge]
+    if: always()
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - name: Evaluate results
+        env:
+          RESULTS: ${{ toJSON(needs.*.result) }}
+        run: |
+          echo "needs results: $RESULTS"
+          if printf '%s' "$RESULTS" | grep -Eq 'failure|cancelled'; then
+            echo "::error::a required job failed or was cancelled"; exit 1
+          fi

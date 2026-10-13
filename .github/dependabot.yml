@@ -1,0 +1,28 @@
+version: 2
+updates:
+  # GitHub Actions: weekly, one grouped PR for minor/patch bumps, majors on their own.
+  # `cooldown` waits a few days before proposing a brand-new release (supply-chain hygiene);
+  # security updates are not delayed by it. Dependabot keeps SHA-pinned actions current
+  # (it rewrites the SHA and the version comment).
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    cooldown:
+      default-days: 7
+    groups:
+      actions:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+    commit-message:
+      prefix: "ci"
+
+  # Base image: keep `FROM debian:trixie-slim@sha256:...` current. Daily and no cooldown on
+  # purpose: picking up Debian security rebuilds quickly is the point of this project.
+  # (Dependabot cannot update FROM lines that use ARG variables, so keep the FROM literal.)
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "daily"
+    commit-message:
+      prefix: "docker"
