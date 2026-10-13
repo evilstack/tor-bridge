@@ -1,12 +1,9 @@
 name: Build, Scan, Publish
 
-# Replaces: build-and-push.yml, pr-gate.yml, update-tor-badge.yml.
 # Images are multi-arch (linux/amd64 + linux/arm64). arm64 is built under QEMU on a standard runner:
-# nothing is compiled any more (apt install only), so emulation is cheap and works on private repos too.
+# nothing is compiled (apt install only).
 # Set ONE required status check in branch protection: "CI success" (job `ci-success`).
 #
-# grep -rn 'TODO(pin)' .github/   -> every action still to be pinned by commit SHA
-# (the all-zero SHAs below are deliberate placeholders and will fail until replaced).
 
 on:
   push:
@@ -297,10 +294,8 @@ jobs:
       # Gating happens separately below. (With --exit-code 1, findings and fatal errors both
       # exit 1 and cannot be told apart.)
       #
-      # On main, each platform of the pushed digest is scanned straight from GHCR, anonymously:
-      # the packages must be public (they are, if you distribute them), and the write token never
-      # reaches the scanner container. If your packages are private, set the repository variable
-      # TRIVY_REGISTRY_AUTH=true to hand Trivy the token anyway.
+      # On main, each platform of the pushed digest is scanned straight from GHCR anonymously.
+      # The write token never reaches the scanner container.
       - name: Trivy scan (JSON, no gating)
         env:
           TRIVY_DEBUG: ${{ runner.debug == '1' && 'true' || 'false' }}
@@ -500,7 +495,7 @@ jobs:
           gh attestation verify "oci://${IMAGE}@${DIGEST}" --repo "$GITHUB_REPOSITORY"
 
   # ---------------------------------------------------------------------------
-  # 4. Tor version badge (replaces update-tor-badge.yml; no workflow_run, no artifacts)
+  # 4. Update Tor version badge; no workflow_run, no artifacts.
   # ---------------------------------------------------------------------------
   badge:
     name: Update Tor version badge
