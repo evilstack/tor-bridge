@@ -14,9 +14,6 @@
 ########################################
 # apt-base: Tor Project apt repo, key fingerprint verified
 ########################################
-# TODO: pin by digest, e.g. debian:trixie-slim@sha256:<digest>
-#   docker buildx imagetools inspect debian:trixie-slim
-# and let Renovate/Dependabot keep the digest current.
 FROM debian:trixie-slim@sha256:a29215f6a35e51e22adffa17f89e9d2ef06214e64a2bad10d765c46aea49f11f AS apt-base
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
@@ -121,7 +118,6 @@ COPY --link torrc.obfs4.example /etc/tor/torrc.example
 COPY --link licenses/lyrebird/ /usr/share/doc/tor-bridge/licenses/lyrebird/
 USER tor-bridge
 
-# TODO: set authors; licensing labels are set in CI (see README).
 LABEL org.opencontainers.image.title="Tor obfs4 bridge" \
       org.opencontainers.image.description="Unofficial Tor bridge image: Tor Project tor + lyrebird (obfs4), built from deb.torproject.org packages" \
       org.opencontainers.image.source="https://github.com/evilstack/tor-bridge" \
