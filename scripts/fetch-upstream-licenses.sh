@@ -32,7 +32,7 @@ fetch() { # <name> <git tag>
     fi
     printf '%s %s %s\n' "$name" "$tag" "$commit" >> "$tmp/sources.txt"
     echo "${name} ${tag} (${commit}):"
-    ls -1 "$dest" | sed 's/^/  /'
+    find "$dest" -maxdepth 1 -mindepth 1 -printf '  %P\n'
 }
 
 : > "$tmp/sources.txt"
