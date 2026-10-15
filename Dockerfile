@@ -18,7 +18,7 @@ FROM debian:trixie-slim@sha256:a29215f6a35e51e22adffa17f89e9d2ef06214e64a2bad10d
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
-ARG TOR_APT_KEY_FINGERPRINT="A3C4 F0F9 79CA A22C DBA8  F512 EE8C BC9E 886D DD89"
+ARG TOR_APT_FINGERPRINT="A3C4 F0F9 79CA A22C DBA8  F512 EE8C BC9E 886D DD89"
 
 # hadolint ignore=DL3008
 RUN set -eux; \
@@ -31,7 +31,7 @@ RUN set -eux; \
     keys="$(gpg --show-keys --with-colons /usr/share/keyrings/torproject.gpg)"; \
     [ "$(echo "$keys" | grep -c '^pub:')" = 1 ] || { echo "FATAL: expected exactly one primary key"; exit 1; }; \
     fpr="$(echo "$keys" | awk -F: '/^fpr:/ {print $10; exit}')"; \
-    expected="$(echo "$TOR_APT_KEY_FINGERPRINT" | tr -d ' ')"; \
+    expected="$(echo "$TOR_APT_FINGERPRINT" | tr -d ' ')"; \
     if [ "$fpr" != "$expected" ]; then \
         echo "FATAL: Tor Project apt key fingerprint mismatch!"; \
         echo "  expected: $expected"; \
