@@ -44,6 +44,7 @@ jobs:
       tor_version: ${{ steps.parse.outputs.tor_version }}
       tor_upstream: ${{ steps.parse.outputs.tor_upstream }}
       base_digest: ${{ steps.parse.outputs.base_digest }}
+      packages_digest: ${{ steps.parse.outputs.packages_digest }}
     steps:
       - name: Check required settings
         run: |
@@ -76,12 +77,13 @@ jobs:
         run: |
           set -euo pipefail
           f=versions-out/versions.env
-          if grep -Evx '(TOR|LYREBIRD|WEBTUNNEL)_VERSION=[A-Za-z0-9.+~-]+' "$f"; then
+          if grep -Evx '(TOR|LYREBIRD|WEBTUNNEL)_VERSION=[A-Za-z0-9.+~-]+|PACKAGES_DIGEST=[0-9a-f]{64}' "$f"; then
             echo "::error::unexpected content in $f"; exit 1
           fi
           get() { grep -m1 "^$1=" "$f" | cut -d= -f2-; }
           tor="$(get TOR_VERSION)"; lyre="$(get LYREBIRD_VERSION)"; wt="$(get WEBTUNNEL_VERSION)"
-          if [ -z "$tor" ] || [ -z "$lyre" ] || [ -z "$wt" ]; then
+          pkgs="$(get PACKAGES_DIGEST)"
+          if [ -z "$tor" ] || [ -z "$lyre" ] || [ -z "$wt" ] || [ -z "$pkgs" ]; then
             echo "::error::missing version in $f"; exit 1
           fi
           up() { printf '%s' "$1" | grep -oE '^[0-9]+(\.[0-9]+)*'; }
@@ -98,6 +100,7 @@ jobs:
             echo "lyrebird_upstream=$(up "$lyre")"
             echo "webtunnel_upstream=$(up "$wt")"
             echo "base_digest=$base_digest"
+            echo "packages_digest=$pkgs"
           } >> "$GITHUB_OUTPUT"
           cat "$f"
 
@@ -116,6 +119,7 @@ jobs:
           LYREBIRD_UPSTREAM: ${{ steps.parse.outputs.lyrebird_upstream }}
           WEBTUNNEL_UPSTREAM: ${{ steps.parse.outputs.webtunnel_upstream }}
           BASE_DIGEST: ${{ steps.parse.outputs.base_digest }}
+          PACKAGES_DIGEST: ${{ steps.parse.outputs.packages_digest }}
         run: |
           set -euo pipefail
           image_base="ghcr.io/${GITHUB_REPOSITORY,,}"
@@ -123,7 +127,8 @@ jobs:
 
           add_target() {
             local target="$1" pt="$2" pt_arg="$3" pt_version="$4" pt_upstream="$5" licenses="$6"
-            local inputs="tor=${TOR_VERSION};${pt}=${pt_version};base=${BASE_DIGEST:-unpinned}"
+            # pkgs= covers Debian security updates to any package in either image.
+            local inputs="tor=${TOR_VERSION};${pt}=${pt_version};base=${BASE_DIGEST:-unpinned};pkgs=${PACKAGES_DIGEST}"
             if [ "$GITHUB_EVENT_NAME" = "schedule" ]; then
               local published
               published="$(docker buildx imagetools inspect --raw "${image_base}/tor-${target}:latest" 2>/dev/null \
@@ -191,6 +196,7 @@ jobs:
           LICENSES: ${{ matrix.licenses }}
           TOR_VERSION: ${{ needs.versions.outputs.tor_version }}
           BASE_DIGEST: ${{ needs.versions.outputs.base_digest }}
+          PACKAGES_DIGEST: ${{ needs.versions.outputs.packages_digest }}
         run: |
           set -euo pipefail
           created="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
@@ -211,6 +217,7 @@ jobs:
             "${LABEL_NS}.tor.version=${TOR_VERSION}"
             "${LABEL_NS}.transport=${PT}"
             "${LABEL_NS}.transport.version=${PT_VERSION}"
+            "${LABEL_NS}.packages.digest=${PACKAGES_DIGEST}"
             "${LABEL_NS}.inputs=${INPUTS}"
           )
           if [ -n "$BASE_DIGEST" ]; then
@@ -251,6 +258,7 @@ jobs:
           build-args: |
             TOR_VERSION=${{ needs.versions.outputs.tor_version }}
             ${{ matrix.pt_arg }}=${{ matrix.pt_version }}
+            PACKAGES_DIGEST=${{ needs.versions.outputs.packages_digest }}
           labels: ${{ steps.oci.outputs.labels }}
           annotations: ${{ env.PUBLISH == 'true' && steps.oci.outputs.annotations || '' }}
           provenance: ${{ env.PUBLISH == 'true' && 'mode=max' || 'false' }}
@@ -269,6 +277,7 @@ jobs:
           build-args: |
             TOR_VERSION=${{ needs.versions.outputs.tor_version }}
             ${{ matrix.pt_arg }}=${{ matrix.pt_version }}
+            PACKAGES_DIGEST=${{ needs.versions.outputs.packages_digest }}
           provenance: false
           sbom: false
           outputs: type=cacheonly
@@ -365,29 +374,7 @@ jobs:
       - name: Gate on scan results
         env:
           TARGET: ${{ matrix.target }}
-        run: |
-          set -euo pipefail
-          fail=0
-          for f in trivy-*.json; do
-            p="${f#trivy-}"; p="${p%.json}"
-            os_bad="$(jq '[.Results[]? | select(.Class=="os-pkgs")   | .Vulnerabilities[]? | select(.Severity=="HIGH" or .Severity=="CRITICAL")] | length' "$f")"
-            lib_crit="$(jq '[.Results[]? | select(.Class=="lang-pkgs") | .Vulnerabilities[]? | select(.Severity=="CRITICAL")] | length' "$f")"
-            lib_high="$(jq '[.Results[]? | select(.Class=="lang-pkgs") | .Vulnerabilities[]? | select(.Severity=="HIGH")] | length' "$f")"
-            {
-              echo "### Trivy: ${TARGET} (${p})"
-              echo "- OS packages, HIGH+CRITICAL (fix available): ${os_bad}"
-              echo "- Go binaries/libraries, CRITICAL (fix available): ${lib_crit}"
-              echo "- Go binaries/libraries, HIGH (reported only): ${lib_high}"
-            } >> "$GITHUB_STEP_SUMMARY"
-            if [ "$os_bad" -gt 0 ] || [ "$lib_crit" -gt 0 ]; then
-              fail=1
-              echo "::error::Gate failed (${p}): os HIGH+CRITICAL=${os_bad}, lib CRITICAL=${lib_crit}"
-              jq -r '.Results[]? | .Class as $c | .Vulnerabilities[]?
-                     | select(($c=="os-pkgs" and (.Severity=="HIGH" or .Severity=="CRITICAL")) or ($c=="lang-pkgs" and .Severity=="CRITICAL"))
-                     | "\(.VulnerabilityID)\t\(.PkgName)\t\(.InstalledVersion) -> \(.FixedVersion)\t\(.Severity)"' "$f"
-            fi
-          done
-          exit "$fail"
+        run: sh scripts/trivy-gate.sh "$TARGET" trivy-*.json
 
       - name: Save digest for the publish job
         if: env.PUBLISH == 'true'

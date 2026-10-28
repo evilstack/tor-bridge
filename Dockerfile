@@ -6,9 +6,10 @@
 #
 # Always pass --target; there is intentionally no default image.
 #
-# Build args TOR_VERSION / LYREBIRD_VERSION / WEBTUNNEL_VERSION are optional.
-# CI resolves the current versions (see the `versions` stage) and passes them so
-# the cache is invalidated exactly when a package changes. Without them a local
+# Build args TOR_VERSION / LYREBIRD_VERSION / WEBTUNNEL_VERSION / PACKAGES_DIGEST
+# are optional. CI resolves the current values (see the `versions` stage) and
+# passes them so the cache is invalidated exactly when a package changes,
+# including Debian security updates to any dependency. Without them a local
 # `docker build` simply installs the newest available packages.
 
 ########################################
@@ -19,10 +20,17 @@ FROM debian:trixie-slim@sha256:a29215f6a35e51e22adffa17f89e9d2ef06214e64a2bad10d
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
 ARG TOR_APT_FINGERPRINT="A3C4 F0F9 79CA A22C DBA8  F512 EE8C BC9E 886D DD89"
+# Fingerprint of every package version the images would contain (see `resolve`).
+# Not used by the commands; it only exists so the cache misses from here on
+# whenever any of those versions changes.
+ARG PACKAGES_DIGEST
 
 # hadolint ignore=DL3008
 RUN set -eux; \
+    echo "packages digest: ${PACKAGES_DIGEST:-unset}"; \
     apt-get update; \
+    # Debian security fixes released since the base image was built.
+    DEBIAN_FRONTEND=noninteractive apt-get -y upgrade; \
     apt-get install -y --no-install-recommends ca-certificates curl gnupg; \
     curl --proto '=https' --tlsv1.2 -fsSL --retry 3 \
         https://deb.torproject.org/torproject.org/A3C4F0F979CAA22CDBA8F512EE8CBC9E886DDD89.asc \
@@ -52,7 +60,7 @@ RUN set -eux; \
 # versions: resolve the current candidate versions (CI helper, not an image)
 #   docker buildx build --target versions --no-cache-filter resolve \
 #       --output type=local,dest=./versions-out .
-# writes ./versions-out/versions.env
+# writes ./versions-out/versions.env (and packages.txt, what PACKAGES_DIGEST covers)
 ########################################
 FROM apt-base AS resolve
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
@@ -67,10 +75,19 @@ RUN set -eux; \
         fi; \
         printf '%s_VERSION=%s\n' "$(echo "$p" | tr '[:lower:]' '[:upper:]')" "$v"; \
     done > /versions.env; \
+    # Upgrade first so the result does not depend on a cached apt-base layer, then
+    # list the installed packages plus what the images would add on top.
+    DEBIAN_FRONTEND=noninteractive apt-get -y upgrade; \
+    { \
+        dpkg-query -W -f '${Package} ${Version}\n'; \
+        apt-get install -s --no-install-recommends tor tor-geoipdb lyrebird webtunnel \
+            | awk '/^Inst / {sub(/^\(/, "", $3); print $2, $3}'; \
+    } | LC_ALL=C sort -u > /packages.txt; \
+    printf 'PACKAGES_DIGEST=%s\n' "$(sha256sum /packages.txt | cut -d' ' -f1)" >> /versions.env; \
     cat /versions.env
 
 FROM scratch AS versions
-COPY --from=resolve /versions.env /versions.env
+COPY --from=resolve /versions.env /packages.txt /
 
 ########################################
 # runtime-base: tor + unprivileged user, common to both images
