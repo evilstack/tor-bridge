@@ -35,6 +35,7 @@ jobs:
   versions:
     name: Resolve package versions
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       contents: read
       packages: read
@@ -163,6 +164,7 @@ jobs:
     needs: versions
     if: needs.versions.outputs.matrix != '[]'
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     permissions:
       contents: read
       packages: write          # push by digest (main only); not granted to fork PRs
@@ -412,6 +414,7 @@ jobs:
     needs: [versions, build-scan]
     if: needs.build-scan.result == 'success' && github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     permissions:
       contents: read
       packages: write
@@ -505,6 +508,7 @@ jobs:
     needs: [versions, publish]
     if: needs.publish.result == 'success'
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     permissions: {}
     steps:
       - name: Update Tor Version Badge Gist
@@ -527,6 +531,7 @@ jobs:
     needs: [versions, build-scan, publish, badge]
     if: always()
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     permissions: {}
     steps:
       - name: Evaluate results
