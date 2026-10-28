@@ -26,3 +26,14 @@ updates:
       interval: "daily"
     commit-message:
       prefix: "docker"
+
+  # Trivy scanner image (.github/docker/trivy/Dockerfile, read by build-and-push.yml).
+  # Weekly with a cooldown, like the actions: it is tooling, not something shipped in the images.
+  - package-ecosystem: "docker"
+    directory: "/.github/docker/trivy"
+    schedule:
+      interval: "weekly"
+    cooldown:
+      default-days: 7
+    commit-message:
+      prefix: "ci"
