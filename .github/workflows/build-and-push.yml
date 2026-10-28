@@ -26,7 +26,6 @@ env:
   IMAGE_AUTHORS: "evilstack"
   OBFS4_LICENSES: "BSD-3-Clause AND GPL-3.0-or-later AND BSD-2-Clause"
   WEBTUNNEL_LICENSES: "BSD-3-Clause AND MIT"
-  TRIVY_IMAGE: ghcr.io/aquasecurity/trivy@sha256:af6acf9a6b85dfe389a1941505c0ce9efef52a4719635e1a962f022a3d855daa
 
 jobs:
   # ---------------------------------------------------------------------------
@@ -49,7 +48,7 @@ jobs:
       - name: Check required settings
         run: |
           set -eu
-          for v in LABEL_NS IMAGE_AUTHORS TRIVY_IMAGE; do
+          for v in LABEL_NS IMAGE_AUTHORS; do
             val="$(printenv "$v")"
             case "$val" in
               *TODO*) echo "::error::$v still contains a TODO placeholder"; exit 1 ;;
@@ -294,6 +293,16 @@ jobs:
       - name: Prepare amd64 archive for scanning (no push)
         if: env.PUBLISH != 'true'
         run: mv /tmp/image.tar image-amd64.tar
+
+      # The reference lives in .github/docker/trivy/Dockerfile so Dependabot can bump it.
+      - name: Load Trivy image reference
+        run: |
+          set -euo pipefail
+          ref="$(awk '$1 == "FROM" {print $2; exit}' .github/docker/trivy/Dockerfile)"
+          if ! printf '%s' "$ref" | grep -Eqx 'ghcr\.io/aquasecurity/trivy:[0-9.]+@sha256:[0-9a-f]{64}'; then
+            echo "::error::unexpected Trivy image reference: ${ref}"; exit 1
+          fi
+          echo "TRIVY_IMAGE=$ref" >> "$GITHUB_ENV"
 
       - name: Date for Trivy DB cache key
         id: day
