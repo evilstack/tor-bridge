@@ -115,8 +115,11 @@ package versions, and the base image digest.
 [`build-and-push.yml`](.github/workflows/build-and-push.yml), roughly:
 
 1. **Daily** (and on every push/PR): ask the Tor Project apt repo which `tor`, `lyrebird` and
-   `webtunnel` versions are current. A scheduled run only rebuilds an image if its inputs
-   (package versions, base image digest) differ from what's published.
+   `webtunnel` versions are current, and fingerprint every package version the images would
+   contain (so Debian security updates to any dependency count too). A scheduled run only
+   rebuilds an image if its inputs (package versions, package fingerprint, base image digest)
+   differ from what's published. Images get `apt-get upgrade`d, so Debian security fixes don't
+   wait for a new base image.
 2. **Build once** per image, for both architectures (arm64 under QEMU), with SBOM and
    max-detail provenance. On `main` it's pushed by digest only: no tags yet.
 3. **Scan that exact digest** with [Trivy](https://trivy.dev). Results go to this repo's Security
@@ -124,6 +127,9 @@ package versions, and the base image digest.
    CRITICAL one in the Go binaries.
 4. **Publish** only if every scan passed: tag the scanned digest, sign it with cosign, attest
    provenance, then verify its own signature before finishing.
+
+[`rescan.yml`](.github/workflows/rescan.yml) re-scans the published `latest` images daily with a
+fresh vulnerability database, so anything disclosed after publishing shows up in the Security tab.
 
 The rest of the safety net: all actions pinned by commit SHA, least-privilege tokens per job,
 [Dependabot](.github/dependabot.yml) for actions and the base image, and

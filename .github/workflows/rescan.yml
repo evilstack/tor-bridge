@@ -1,0 +1,99 @@
+name: Rescan Published Images
+
+# Re-scans the published :latest images with a fresh Trivy DB, so a vulnerability disclosed
+# after publishing shows up in the Security tab (same SARIF category as the build, so alerts
+# track what is actually published) and fails this run. Runs after the daily build, which
+# rebuilds on its own once Debian or the Tor Project ship a fix (see PACKAGES_DIGEST).
+
+on:
+  schedule:
+    - cron: '41 5 * * *'   # daily, after build-and-push.yml's scheduled run
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+permissions: {}
+
+env:
+  TRIVY_IMAGE: ghcr.io/aquasecurity/trivy@sha256:af6acf9a6b85dfe389a1941505c0ce9efef52a4719635e1a962f022a3d855daa
+
+jobs:
+  rescan:
+    name: Rescan (${{ matrix.target }})
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write   # SARIF upload
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [obfs4, webtunnel]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Resolve published digest
+        env:
+          TARGET: ${{ matrix.target }}
+        run: |
+          set -euo pipefail
+          image="ghcr.io/${GITHUB_REPOSITORY,,}/tor-${TARGET}"
+          digest="$(docker buildx imagetools inspect "${image}:latest" --format '{{json .Manifest}}' | jq -r .digest)"
+          case "$digest" in sha256:*) ;; *) echo "::error::could not resolve ${image}:latest"; exit 1 ;; esac
+          echo "Scanning ${image}@${digest}"
+          echo "IMAGE_REF=${image}@${digest}" >> "$GITHUB_ENV"
+
+      - name: Date for Trivy DB cache key
+        id: day
+        run: echo "day=$(date -u +%F)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Trivy DB
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/trivy-cache
+          key: trivy-db-${{ steps.day.outputs.day }}
+          restore-keys: trivy-db-
+
+      # As in build-and-push.yml: the scan never sets --exit-code, gating happens below.
+      # Pulls anonymously; no token reaches the scanner container.
+      - name: Trivy scan (JSON, no gating)
+        env:
+          TRIVY_DEBUG: ${{ runner.debug == '1' && 'true' || 'false' }}
+        run: |
+          set -euo pipefail
+          cache="$RUNNER_TEMP/trivy-cache"; mkdir -p "$cache"
+          for p in amd64 arm64; do
+            args=(image --scanners vuln --pkg-types "os,library" --ignore-unfixed
+                  --format json --output "/work/trivy-${p}.json" --exit-code 0
+                  --image-src remote --platform "linux/${p}")
+            if [ -f .trivyignore ]; then args+=(--ignorefile /work/.trivyignore); fi
+            echo "::group::Trivy ${p}"
+            docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp -e TRIVY_CACHE_DIR=/cache -e TRIVY_DEBUG \
+              -v "$PWD:/work" -v "$cache:/cache" -w /work \
+              "$TRIVY_IMAGE" "${args[@]}" "$IMAGE_REF"
+            echo "::endgroup::"
+            test -s "trivy-${p}.json"
+          done
+
+      - name: Convert to SARIF (amd64)
+        run: |
+          set -euo pipefail
+          docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp -v "$PWD:/work" -w /work "$TRIVY_IMAGE" \
+            convert --format sarif --output /work/trivy.sarif /work/trivy-amd64.json
+          test -s trivy.sarif
+
+      - name: Upload SARIF to the Security tab
+        if: ${{ !cancelled() && hashFiles('trivy.sarif') != '' }}
+        uses: github/codeql-action/upload-sarif@24c54180a607b1449ed407dd24f251e4e9147c8d # v4.38.3
+        with:
+          sarif_file: trivy.sarif
+          category: trivy-${{ matrix.target }}
+
+      - name: Gate on scan results
+        env:
+          TARGET: ${{ matrix.target }}
+        run: sh scripts/trivy-gate.sh "$TARGET" trivy-*.json
