@@ -314,21 +314,17 @@ jobs:
       # Gating happens separately below. (With --exit-code 1, findings and fatal errors both
       # exit 1 and cannot be told apart.)
       #
-      # On main, each platform of the pushed digest is scanned straight from GHCR anonymously.
-      # The write token never reaches the scanner container.
+      # On main, each platform of the pushed digest is scanned straight from GHCR anonymously
+      # (the packages are public). No token is passed to the scanner container: this job's token
+      # has packages: write. If the packages ever become private, scan from a separate job with
+      # packages: read instead of handing this one over.
       - name: Trivy scan (JSON, no gating)
         env:
           TRIVY_DEBUG: ${{ runner.debug == '1' && 'true' || 'false' }}
           DIGEST: ${{ steps.build.outputs.digest }}
-          TRIVY_REGISTRY_AUTH: ${{ vars.TRIVY_REGISTRY_AUTH }}
-          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           cache="$RUNNER_TEMP/trivy-cache"; mkdir -p "$cache"
-          auth=()
-          if [ "${TRIVY_REGISTRY_AUTH:-}" = "true" ]; then
-            auth=(-e "TRIVY_USERNAME=${GITHUB_ACTOR}" -e "TRIVY_PASSWORD=${GH_TOKEN}")
-          fi
           for p in $PLATFORMS; do
             if [ "$PUBLISH" = "true" ]; then
               case "$DIGEST" in sha256:*) ;; *) echo "::error::no image digest from build"; exit 1 ;; esac
@@ -341,7 +337,7 @@ jobs:
             if [ -f .trivyignore ]; then args+=(--ignorefile /work/.trivyignore); fi
             echo "::group::Trivy ${p}"
             docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp -e TRIVY_CACHE_DIR=/cache -e TRIVY_DEBUG \
-              "${auth[@]}" -v "$PWD:/work" -v "$cache:/cache" -w /work \
+              -v "$PWD:/work" -v "$cache:/cache" -w /work \
               "$TRIVY_IMAGE" "${args[@]}" "${src[@]}"
             echo "::endgroup::"
             test -s "trivy-${p}.json"
