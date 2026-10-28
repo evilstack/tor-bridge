@@ -282,8 +282,11 @@ jobs:
         id: day
         run: echo "day=$(date -u +%F)" >> "$GITHUB_OUTPUT"
 
+      # Only the Trivy vulnerability DB is cached here, never anything that ends up in an image,
+      # and PR runs can't write caches that main reads. Hence the cache-poisoning ignore below
+      # (inline, so it can't drift the way a line-number ignore in zizmor.yml did).
       - name: Cache Trivy DB
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0 # zizmor: ignore[cache-poisoning]
         with:
           path: ${{ runner.temp }}/trivy-cache
           key: trivy-db-${{ steps.day.outputs.day }}
