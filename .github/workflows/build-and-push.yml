@@ -131,8 +131,10 @@ jobs:
 
           add_target() {
             local target="$1" pt="$2" pt_arg="$3" pt_version="$4" pt_upstream="$5" licenses="$6"
-            # pkgs= covers Debian security updates to any package in either image.
-            local inputs="tor=${TOR_VERSION};${pt}=${pt_version};base=${BASE_DIGEST:-unpinned};pkgs=${PACKAGES_DIGEST}"
+            # pkgs= covers Debian security updates to any package in either image. rev= makes a
+            # scheduled run retry a target whose last build on main never published (e.g. a
+            # failed gate or a flaky runner), since :latest then still carries an older commit.
+            local inputs="tor=${TOR_VERSION};${pt}=${pt_version};base=${BASE_DIGEST:-unpinned};pkgs=${PACKAGES_DIGEST};rev=${GITHUB_SHA}"
             if [ "$GITHUB_EVENT_NAME" = "schedule" ]; then
               local published
               published="$(docker buildx imagetools inspect --raw "${image_base}/tor-${target}:latest" 2>/dev/null \
