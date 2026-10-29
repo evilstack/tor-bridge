@@ -16,13 +16,11 @@ concurrency:
 
 permissions: {}
 
-env:
-  TRIVY_IMAGE: ghcr.io/aquasecurity/trivy@sha256:af6acf9a6b85dfe389a1941505c0ce9efef52a4719635e1a962f022a3d855daa
-
 jobs:
   rescan:
     name: Rescan (${{ matrix.target }})
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     permissions:
       contents: read
       security-events: write   # SARIF upload
@@ -46,6 +44,16 @@ jobs:
           case "$digest" in sha256:*) ;; *) echo "::error::could not resolve ${image}:latest"; exit 1 ;; esac
           echo "Scanning ${image}@${digest}"
           echo "IMAGE_REF=${image}@${digest}" >> "$GITHUB_ENV"
+
+      # Same Dependabot-tracked reference as build-and-push.yml.
+      - name: Load Trivy image reference
+        run: |
+          set -euo pipefail
+          ref="$(awk '$1 == "FROM" {print $2; exit}' .github/docker/trivy/Dockerfile)"
+          if ! printf '%s' "$ref" | grep -Eqx 'ghcr\.io/aquasecurity/trivy:[0-9.]+@sha256:[0-9a-f]{64}'; then
+            echo "::error::unexpected Trivy image reference: ${ref}"; exit 1
+          fi
+          echo "TRIVY_IMAGE=$ref" >> "$GITHUB_ENV"
 
       - name: Date for Trivy DB cache key
         id: day
