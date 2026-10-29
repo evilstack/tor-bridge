@@ -64,8 +64,9 @@ RUN set -eux; \
 ########################################
 FROM apt-base AS resolve
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
-# throwaway stage: apt lists are intentionally not cleaned
-# hadolint ignore=DL3009
+# throwaway stage: apt lists are intentionally not cleaned (DL3009), and
+# `apt-get install -s` only simulates, so -y and version pins don't apply (DL3014, DL3008)
+# hadolint ignore=DL3008,DL3009,DL3014
 RUN set -eux; \
     apt-get update; \
     for p in tor lyrebird webtunnel; do \
