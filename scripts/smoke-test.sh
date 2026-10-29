@@ -31,8 +31,10 @@ echo "== runtime user and permissions"
 [ "$(in_image id -u)" = 10001 ] || fail "not running as UID 10001"
 [ "$(in_image id -g)" = 10001 ] || fail "not running as GID 10001"
 in_image sh -c 'test ! -w /etc/tor' || fail "/etc/tor is writable by the runtime user"
+# Only the permission bits: Debian's tor postinst sets setgid on it (02700), which is fine.
 # shellcheck disable=SC2016 # expands inside the container
-in_image sh -c 'test -w /var/lib/tor && [ "$(stat -c %a /var/lib/tor)" = 700 ]' \
+in_image sh -c 'test -w /var/lib/tor && [ "$(stat -c %u /var/lib/tor)" = 10001 ] \
+    && [ -n "$(find /var/lib/tor -maxdepth 0 -perm -u=rwx ! -perm /g=rwx,o=rwx)" ]' \
     || fail "/var/lib/tor is not a private, writable data directory"
 in_image test -x "$bin" || fail "$bin missing"
 if [ "$target" = webtunnel ]; then
