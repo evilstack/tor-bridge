@@ -29,6 +29,13 @@ jobs:
       matrix:
         target: [obfs4, webtunnel]
     steps:
+      # Records network, process and file activity; results at app.stepsecurity.io (link in
+      # this step's log). Audit only: nothing is blocked yet. The default is block.
+      - name: Harden runner
+        uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
+        with:
+          egress-policy: audit
+
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

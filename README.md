@@ -134,6 +134,8 @@ package versions, and the base image digest.
 fresh vulnerability database, so anything disclosed after publishing shows up in the Security tab.
 
 The rest of the safety net: all actions pinned by commit SHA, least-privilege tokens per job,
+[harden-runner](https://github.com/step-security/harden-runner) recording each job's network
+activity (audit mode for now),
 [Dependabot](.github/dependabot.yml) for actions and the base image, and
 [CI checks](.github/workflows/ci.yml) (actionlint, zizmor, Hadolint, ShellCheck, dependency review).
 
