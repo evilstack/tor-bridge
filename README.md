@@ -126,8 +126,9 @@ package versions, and the base image digest.
    config, tor must launch the transport), then scan it with [Trivy](https://trivy.dev).
    Results go to this repo's Security tab (SARIF). The build fails on any fixable HIGH/CRITICAL
    OS vulnerability or fixable CRITICAL one in the Go binaries.
-4. **Publish** only if every scan passed: tag the scanned digest, sign it with cosign, attest
-   provenance, then verify its own signature before finishing.
+4. **Publish** each image whose smoke test and scan passed (one image failing doesn't hold back
+   the other): tag the scanned digest, sign it with cosign, attest provenance, then verify its
+   own signature before finishing.
 
 [`rescan.yml`](.github/workflows/rescan.yml) re-scans the published `latest` images daily with a
 fresh vulnerability database, so anything disclosed after publishing shows up in the Security tab.

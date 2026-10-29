@@ -427,12 +427,48 @@ jobs:
 
   # ---------------------------------------------------------------------------
   # 3. Publish: tag the already-scanned digest, sign it, attest provenance, self-verify.
-  #    Runs only on main (push / schedule / manual) after EVERY target passed its gate.
+  #    Runs only on main (push / schedule / manual), for each target that passed its own
+  #    smoke test and gate: one target's failure doesn't hold back the other's release.
+  #    (CI success still fails, so the failure is not missed.)
   # ---------------------------------------------------------------------------
+  select-publish:
+    name: Select targets to publish
+    needs: [versions, build-scan]
+    if: ${{ !cancelled() && needs.build-scan.result != 'skipped' && github.event_name != 'pull_request' && github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions: {}
+    outputs:
+      matrix: ${{ steps.select.outputs.matrix }}
+    steps:
+      # build-scan uploads digest-<target> only after every check of that target passed.
+      - name: Download digests of passing targets
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: digest-*
+          path: digests
+
+      - name: Narrow the matrix to passing targets
+        id: select
+        env:
+          MATRIX: ${{ needs.versions.outputs.matrix }}
+        run: |
+          set -euo pipefail
+          passed='[]'
+          for f in digests/digest-*/digest.txt; do
+            [ -f "$f" ] || continue
+            t="${f#digests/digest-}"; t="${t%/digest.txt}"
+            passed="$(jq -c --arg t "$t" '. + [$t]' <<<"$passed")"
+          done
+          matrix="$(jq -c --argjson passed "$passed" '[.[] | select(.target as $t | $passed | index($t))]' <<<"$MATRIX")"
+          echo "Passed: $passed"
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+
   publish:
     name: Publish (${{ matrix.target }})
-    needs: [versions, build-scan]
-    if: needs.build-scan.result == 'success' && github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs: [versions, select-publish]
+    # !cancelled(): a failed build-scan leg must not skip publishing the targets that passed.
+    if: ${{ !cancelled() && needs.select-publish.result == 'success' && needs.select-publish.outputs.matrix != '[]' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
@@ -443,7 +479,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include: ${{ fromJSON(needs.versions.outputs.matrix) }}
+        include: ${{ fromJSON(needs.select-publish.outputs.matrix) }}
     steps:
       - name: Download digest
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
@@ -526,7 +562,7 @@ jobs:
   badge:
     name: Update Tor version badge
     needs: [versions, publish]
-    if: needs.publish.result == 'success'
+    if: ${{ !cancelled() && needs.publish.result == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions: {}
@@ -548,7 +584,7 @@ jobs:
   # ---------------------------------------------------------------------------
   ci-success:
     name: CI success
-    needs: [versions, build-scan, publish, badge]
+    needs: [versions, build-scan, select-publish, publish, badge]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
