@@ -89,20 +89,26 @@ jobs:
           if [ -z "$tor" ] || [ -z "$lyre" ] || [ -z "$wt" ] || [ -z "$pkgs" ]; then
             echo "::error::missing version in $f"; exit 1
           fi
-          up() { printf '%s' "$1" | grep -oE '^[0-9]+(\.[0-9]+)*'; }
+          # Upstream version (0.4.8.13 from 0.4.8.13-1~d13.trixie+1); used in image tags.
+          up() { printf '%s' "$1" | grep -oE '^[0-9]+(\.[0-9]+)*' || true; }
           # Digest of the pinned base image (empty if the Dockerfile FROM is not pinned yet).
           # Only the first FROM line: the `# syntax=` frontend is pinned by digest too.
           base_digest="$(grep -m1 '^FROM ' Dockerfile | grep -oE '@sha256:[a-f0-9]{64}' | cut -c2- || true)"
           if [ -z "$base_digest" ]; then
             echo "::warning::Dockerfile FROM is not pinned by digest; base image changes will not be detected by the scheduled check"
           fi
+          tor_up="$(up "$tor")"; lyre_up="$(up "$lyre")"; wt_up="$(up "$wt")"
+          if [ -z "$tor_up" ] || [ -z "$lyre_up" ] || [ -z "$wt_up" ]; then
+            # Otherwise publish would create tags like `lyrebird--tor`.
+            echo "::error::could not derive an upstream version from tor=${tor} lyrebird=${lyre} webtunnel=${wt}"; exit 1
+          fi
           {
             echo "tor_version=$tor"
             echo "lyrebird_version=$lyre"
             echo "webtunnel_version=$wt"
-            echo "tor_upstream=$(up "$tor")"
-            echo "lyrebird_upstream=$(up "$lyre")"
-            echo "webtunnel_upstream=$(up "$wt")"
+            echo "tor_upstream=$tor_up"
+            echo "lyrebird_upstream=$lyre_up"
+            echo "webtunnel_upstream=$wt_up"
             echo "base_digest=$base_digest"
             echo "packages_digest=$pkgs"
           } >> "$GITHUB_OUTPUT"
