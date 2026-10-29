@@ -117,9 +117,9 @@ package versions, and the base image digest.
 1. **Daily** (and on every push/PR): ask the Tor Project apt repo which `tor`, `lyrebird` and
    `webtunnel` versions are current, and fingerprint every package version the images would
    contain (so Debian security updates to any dependency count too). A scheduled run only
-   rebuilds an image if its inputs (package versions, package fingerprint, base image digest)
-   differ from what's published. Images get `apt-get upgrade`d, so Debian security fixes don't
-   wait for a new base image.
+   rebuilds an image if its inputs (package versions, package fingerprint, base image digest,
+   commit) differ from what's published, so a build on `main` that didn't publish is retried.
+   Images get `apt-get upgrade`d, so Debian security fixes don't wait for a new base image.
 2. **Build once** per image, for both architectures (arm64 under QEMU), with SBOM and
    max-detail provenance. On `main` it's pushed by digest only: no tags yet.
 3. **Smoke-test and scan that exact digest**: run the amd64 image (unprivileged user, read-only
