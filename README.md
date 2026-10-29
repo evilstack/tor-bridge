@@ -122,9 +122,10 @@ package versions, and the base image digest.
    wait for a new base image.
 2. **Build once** per image, for both architectures (arm64 under QEMU), with SBOM and
    max-detail provenance. On `main` it's pushed by digest only: no tags yet.
-3. **Scan that exact digest** with [Trivy](https://trivy.dev). Results go to this repo's Security
-   tab (SARIF). The build fails on any fixable HIGH/CRITICAL OS vulnerability or fixable
-   CRITICAL one in the Go binaries.
+3. **Smoke-test and scan that exact digest**: run the amd64 image (unprivileged user, read-only
+   config, tor must launch the transport), then scan it with [Trivy](https://trivy.dev).
+   Results go to this repo's Security tab (SARIF). The build fails on any fixable HIGH/CRITICAL
+   OS vulnerability or fixable CRITICAL one in the Go binaries.
 4. **Publish** only if every scan passed: tag the scanned digest, sign it with cosign, attest
    provenance, then verify its own signature before finishing.
 
@@ -140,6 +141,10 @@ The rest of the safety net: all actions pinned by commit SHA, least-privilege to
 ```bash
 docker buildx build --target obfs4 -t tor-obfs4:dev .        # newest packages
 docker buildx build --target webtunnel -t tor-webtunnel:dev .
+
+# run it like CI does: user/permission checks, then tor must launch the transport
+# (the test bridge never publishes a descriptor)
+bash scripts/smoke-test.sh tor-obfs4:dev obfs4
 
 # which package versions would CI use right now?
 docker buildx build --target versions --no-cache-filter resolve --output type=local,dest=./out .

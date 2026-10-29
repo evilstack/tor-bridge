@@ -296,6 +296,23 @@ jobs:
         if: env.PUBLISH != 'true'
         run: mv /tmp/image.tar image-amd64.tar
 
+      # Run the amd64 image (the pushed digest on main, the local archive otherwise) before
+      # anything is scanned or published. arm64 is not run: under QEMU that mostly tests QEMU.
+      - name: Smoke test (amd64)
+        env:
+          TARGET: ${{ matrix.target }}
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          set -euo pipefail
+          if [ "$PUBLISH" = "true" ]; then
+            ref="${IMAGE}@${DIGEST}"
+            docker pull --platform linux/amd64 "$ref"
+          else
+            ref="$(docker load -i image-amd64.tar | sed -n 's/^Loaded image\( ID\)\{0,1\}: //p' | tail -n1)"
+          fi
+          if [ -z "$ref" ]; then echo "::error::no image to smoke test"; exit 1; fi
+          bash scripts/smoke-test.sh "$ref" "$TARGET"
+
       # The reference lives in .github/docker/trivy/Dockerfile so Dependabot can bump it.
       - name: Load Trivy image reference
         run: |
