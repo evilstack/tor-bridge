@@ -46,6 +46,13 @@ jobs:
       base_digest: ${{ steps.parse.outputs.base_digest }}
       packages_digest: ${{ steps.parse.outputs.packages_digest }}
     steps:
+      # Records network, process and file activity; results at app.stepsecurity.io (link in
+      # this step's log). Audit only: nothing is blocked yet. The default is block.
+      - name: Harden runner
+        uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
+        with:
+          egress-policy: audit
+
       - name: Check required settings
         run: |
           set -eu
@@ -188,6 +195,11 @@ jobs:
       matrix:
         include: ${{ fromJSON(needs.versions.outputs.matrix) }}
     steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
+        with:
+          egress-policy: audit
+
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -447,6 +459,11 @@ jobs:
     outputs:
       matrix: ${{ steps.select.outputs.matrix }}
     steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
+        with:
+          egress-policy: audit
+
       # build-scan uploads digest-<target> only after every check of that target passed.
       - name: Download digests of passing targets
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
@@ -487,6 +504,11 @@ jobs:
       matrix:
         include: ${{ fromJSON(needs.select-publish.outputs.matrix) }}
     steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
+        with:
+          egress-policy: audit
+
       - name: Download digest
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
@@ -573,6 +595,11 @@ jobs:
     timeout-minutes: 5
     permissions: {}
     steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
+        with:
+          egress-policy: audit
+
       - name: Update Tor Version Badge Gist
         uses: schneegans/dynamic-badges-action@28b0fa8bdeb46170ac397105ece0c1fe58f68910 # v1.9.0
         with:
@@ -596,6 +623,11 @@ jobs:
     timeout-minutes: 5
     permissions: {}
     steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
+        with:
+          egress-policy: audit
+
       - name: Evaluate results
         env:
           RESULTS: ${{ toJSON(needs.*.result) }}
