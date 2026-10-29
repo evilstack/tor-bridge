@@ -91,7 +91,8 @@ jobs:
           fi
           up() { printf '%s' "$1" | grep -oE '^[0-9]+(\.[0-9]+)*'; }
           # Digest of the pinned base image (empty if the Dockerfile FROM is not pinned yet).
-          base_digest="$(grep -m1 -oE '@sha256:[a-f0-9]{64}' Dockerfile | cut -c2- || true)"
+          # Only the first FROM line: the `# syntax=` frontend is pinned by digest too.
+          base_digest="$(grep -m1 '^FROM ' Dockerfile | grep -oE '@sha256:[a-f0-9]{64}' | cut -c2- || true)"
           if [ -z "$base_digest" ]; then
             echo "::warning::Dockerfile FROM is not pinned by digest; base image changes will not be detected by the scheduled check"
           fi
